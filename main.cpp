@@ -14,7 +14,6 @@ struct UserData {
     Mat image;
 //    UserData(Mat& im, Mat& o)
 //    {
-
 //    }
 };
 
@@ -43,7 +42,10 @@ std::vector<int> knots({0, 0, 0, 50, 100, 100, 100});
 int dimsN[] = {tn, n, q};
 std::vector<cv::Mat> N(q, cv::Mat(cv::Size(tn, n), CV_32F, cv::Scalar(0)));
 
-
+std::vector<std::vector<cv::Scalar> >colors(100, std::vector<cv::Scalar>(100));
+//cv::Mat src_image;/// CV_8UC3
+//cv::Mat img_float;
+//src_image.converTo(img_float, CV_32FC3, 1 / 255.O);
 
 
 void CallBackFunc(int event, int x, int y, int flags, void* userdata)
@@ -106,7 +108,8 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
                             linePoint += N[q - 1].at<float>(k, ii) * N[q - 1].at<float>(j, i) * controlPoints[j * 4 + k];
                         }
                     }
-                    cv::circle(image, linePoint, 1, cv::Scalar(i * 2, 250 - ii * 2, ii + i), 1);
+//                    cv::circle(image, linePoint, 1, cv::Scalar(i * 2, 250 - ii * 2, ii + i), 1);
+                    cv::circle(image, linePoint, 1, colors[i][ii], 2);
                 }
             }
 
@@ -124,8 +127,10 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 int main(int argc, char** argv )
 {
     Mat image;
-//    image = imread("../../girl.jpg", 1);
-    image = cv::Mat::zeros(cv::Size(600, 600), CV_8UC4);
+    image = imread("../../girl.jpg", 1);
+//    image = cv::Mat::zeros(cv::Size(600, 600), CV_8UC4);
+
+
     int w = image.cols;
     int h = image.rows;
     w /= 2;
@@ -134,6 +139,16 @@ int main(int argc, char** argv )
     h3 = h/3;
     cv::resize(image, image, cv::Size(w,h));
     image.copyTo(orig);
+
+    for (int i = 0; i < tn; i++)
+    {
+        for(int j = 0; j < tn; j++)
+        {
+            Vec3b clr = orig.at<cv::Vec3b>(h / 100.0 * i, w / 100.0 * j);
+            colors[i][j] = cv::Scalar({(double)clr[0], (double)clr[1], (double)clr[2]});
+        }
+    }
+
     UserData ud;
     ud.image = image;
     ud.orig = orig;
