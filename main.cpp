@@ -19,6 +19,33 @@ struct UserData {
 };
 
 
+//std::vector<cv::Point> R(cv::Mat& N, std::vector<cv::Point>& P)
+//{
+//    cv::Mat xs(cv::Size(P.size(), 1), cv::DataType<int>::type, cv::Scalar(0));
+//    cv::Mat ys(cv::Size(P.size(), 1), cv::DataType<int>::type, cv::Scalar(0));
+//    for (int i = 0; i < P.size(); i++)
+//    {
+//        cv::Point& p = P[i];
+//        xs.at<int>(i, 0) = p.x;
+//        ys.at<int>(i, 0) = p.y;
+//    }
+
+//}
+
+const int q = 3;
+const int tn = 100;
+const int n = 4;
+
+//std::vector<float> knots({0,0,0,0.5,1,1,1});
+//std::vector<float> knots({0.0, 0.2, 0.4, 0.6, 0.8, 1.0});
+std::vector<int> knots({0, 0, 0, 50, 100, 100, 100});
+//std::vector<int> knots({0, 20, 40, 60, 80, 100});
+int dimsN[] = {tn, n, q};
+std::vector<cv::Mat> N(q, cv::Mat(cv::Size(tn, n), CV_32F, cv::Scalar(0)));
+
+
+
+
 void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 {
 //     if  ( event == EVENT_LBUTTONDOWN )
@@ -59,33 +86,36 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
     }
     if ( event == EVENT_MOUSEMOVE && flags == EVENT_FLAG_LBUTTON)
     {
-      cout << "Mouse move over the window - position (" << x << ", " << y << ")" << endl;
-//      cout << "Part(" << px << ", " << py << ")" << endl;
-      if (activeCP)
-      {
-          controlPoints[activeCP] = currentP;
+        cout << "Mouse move over the window - position (" << x << ", " << y << ")" << endl;
+        //      cout << "Part(" << px << ", " << py << ")" << endl;
+        if (activeCP)
+        {
+            controlPoints[activeCP] = currentP;
 
-          orig.copyTo(image);
-          for (auto point : controlPoints)
-          {
-              cv::circle(image, point, 5, cv::Scalar(10, 10,250), 10);
-          }
-          imshow(name, image);
-      }
+            orig.copyTo(image);
+
+            for (int i = 0; i < tn; i++)
+            {
+                cv::Point linePoint(0,0);
+                for (int j = 0; j < n; j++)
+                {
+                    linePoint += N[q - 1].at<float>(j, i) * controlPoints[j + 4];
+                }
+                cv::circle(image, linePoint, 1, cv::Scalar(10, 250, 10), 1);
+            }
+
+            for (auto point : controlPoints)
+            {
+                cv::circle(image, point, 5, cv::Scalar(10, 10,250), 10);
+            }
+            imshow(name, image);
+        }
     }
 }
 
-const int q = 3;
-const int tn = 100;
-const int n = 4;
 
-std::vector<float> knots({0,0,0,0.5,1,1,1});
 
-//cv::Mat N0(cv::Size(tn, n+q+1), CV_32F, cv::Scalar(0.0));
-cv::Mat N0;
 
-int dimsN[] = {tn, n, q};
-std::vector<cv::Mat> N(q, cv::Mat(cv::Size(tn, n), CV_32F, cv::Scalar(0)));
 
 
 int main(int argc, char** argv )
@@ -103,7 +133,6 @@ int main(int argc, char** argv )
     UserData ud;
     ud.image = image;
     ud.orig = orig;
-    N0 = cv::Mat::zeros(cv::Size(tn, n+q+1), CV_32F);
     for (int i = 0; i < N.size(); i++)
     {
         N[i] = cv::Mat::zeros(cv::Size(tn, n+q+1), CV_32F);
@@ -124,56 +153,37 @@ int main(int argc, char** argv )
     namedWindow(name, WINDOW_AUTOSIZE );
     setMouseCallback(name, CallBackFunc, &ud);
     imshow(name, image);
-
     namedWindow("n0", cv::WINDOW_FREERATIO );
     namedWindow("n1", cv::WINDOW_FREERATIO );
     namedWindow("n2", cv::WINDOW_FREERATIO );
 
-    for (int j = 0; j < n + q; j++)
+    for (int i = 0; i < n + 1; i++)
     {
-        cout << endl;
-        for (int i = 0; i < tn; i++)
+        if (knots[i+1] - knots[i] > 0)
         {
-            cout << N0.at<float>(j ,i) << " ";
+//            cv::line(N[0], cv::Point(knots[i] * N[0].cols, i), cv::Point(std::max((float)0.0, knots[i+1] - eps) * N[0].cols, i), cv::Scalar(1.0));
+            int t = knots[i];
+            while (t < knots[i+1])
+            {
+                N[0].at<float>(i, t++) = 1.0;
+            }
         }
     }
-    cout << endl;
 
-    for (int i = q - 1; i < n; i++)
-    {
-        cv::line(N0, cv::Point(knots[i] * N0.cols, i), cv::Point(std::max(0.0, knots[i+1] - 0.0001) * N0.cols, i), cv::Scalar(1.0));
-    }
-    N[0] = N0;
-
-    for (int j = 0; j < n + q; j++)
-    {
-        cout << endl;
-        for (int i = 0; i < tn; i++)
-        {
-            cout << N0.at<float>(j, i) << " ";
-        }
-    }
-    cout << endl;
 
     for (int dq = 1; dq < 3; dq++)
     {
-        for (int j = q - dq - 1; j < n + dq - 1; j++)
+        for (int j = 0; j < n + dq - 1; j++)
         {
             for (int i = 0; i < tn; i++)
             {
                 float t = (float)i / tn;
                 float mul1 = N[dq - 1].at<float>(j, i);
                 float mul2 = N[dq - 1].at<float>(j + 1, i);
-                float del1 = knots[j + dq] - knots[j];
-                float del2 = knots[j + dq + 1] - knots[j + 1];
-                float dist1 = (t - knots[j]);
-                float dist2 = (knots[j + dq + 1] - t);
-
-                if (dist1 > del1 || dist2 > del2)
-                {
-//                    cout << "pzdc";
-                }
-
+                float del1 = (float)(knots[j + dq] - knots[j]) / tn;
+                float del2 = (float)(knots[j + dq + 1] - knots[j + 1]) / tn;
+                float dist1 = (t - (float)knots[j]/tn);
+                float dist2 = ((float)(knots[j + dq + 1])/tn - t);
                 if (del1 > eps && mul1 > eps)
                 {
                     N[dq].at<float>(j, i) = dist1 / del1 * mul1;
@@ -184,11 +194,7 @@ int main(int argc, char** argv )
             }
         }
     }
-
-//    resizeWindow("n0", N0.cols, N0.rows);
-//    resizeWindow("n0", N0.cols, N0.rows);
-//    cv::resize(N0, N0, cv::Size(N0.cols,N0.rows * 20), 0, 0, INTER_NEAREST);
-    imshow("n0", N0);
+    imshow("n0", N[0]);
     imshow("n1", N[1]);
     imshow("n2", N[2]);
     waitKey(0);
