@@ -106,7 +106,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
                             linePoint += N[q - 1].at<float>(k, ii) * N[q - 1].at<float>(j, i) * controlPoints[j * 4 + k];
                         }
                     }
-                    cv::circle(image, linePoint, 1, cv::Scalar(i * 2, 250 - i * 2, ii + i), 1);
+                    cv::circle(image, linePoint, 1, cv::Scalar(i * 2, 250 - ii * 2, ii + i), 1);
                 }
             }
 
@@ -121,13 +121,11 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 
 
 
-
-
-
 int main(int argc, char** argv )
 {
     Mat image;
-    image = imread("../../girl.jpg", 1);
+//    image = imread("../../girl.jpg", 1);
+    image = cv::Mat::zeros(cv::Size(600, 600), CV_8UC4);
     int w = image.cols;
     int h = image.rows;
     w /= 2;
@@ -159,9 +157,9 @@ int main(int argc, char** argv )
     namedWindow(name, WINDOW_AUTOSIZE );
     setMouseCallback(name, CallBackFunc, &ud);
     imshow(name, image);
-    namedWindow("n0", cv::WINDOW_FREERATIO );
-    namedWindow("n1", cv::WINDOW_FREERATIO );
-    namedWindow("n2", cv::WINDOW_FREERATIO );
+//    namedWindow("n0", cv::WINDOW_FREERATIO );
+//    namedWindow("n1", cv::WINDOW_FREERATIO );
+//    namedWindow("n2", cv::WINDOW_FREERATIO );
 
     for (int i = 0; i < n + 1; i++)
     {
@@ -200,9 +198,9 @@ int main(int argc, char** argv )
             }
         }
     }
-    imshow("n0", N[0]);
-    imshow("n1", N[1]);
-    imshow("n2", N[2]);
+//    imshow("n0", N[0]);
+//    imshow("n1", N[1]);
+//    imshow("n2", N[2]);
     waitKey(0);
     return 0;
 }
