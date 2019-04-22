@@ -110,11 +110,12 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
                             linePoint += N[q - 1].at<float>(k, ii) * N[q - 1].at<float>(j, i) * controlPoints[j * 4 + k];
                         }
                     }
-                    cv::Point delta = cv::Point(orig.cols / 100.0 * i, orig.rows / 100.0 * ii);
+                    cv::Point coordsPoint(orig.cols / 100.0 * ii, orig.rows / 100.0 * i);
+                    cv::Point delta = 2 * coordsPoint - linePoint;
 
-                    cv::Point coordsPoint(i, ii);
 //                    cv::circle(image, linePoint, 1, cv::Scalar(i * 2, 250 - ii * 2, ii + i), 1);
-                    cv::Scalar color = orig.at<cv::Vec3b>(linePoint.x, linePoint.y);
+//                    cv::Scalar color = orig.at<cv::Vec3b>(linePoint.y, linePoint.x);
+                    cv::Scalar color = orig.at<cv::Vec3b>(delta.y, delta.x);
                     cv::circle(image, coordsPoint, 1, color, 2);
                 }
             }
@@ -149,7 +150,8 @@ int main(int argc, char** argv )
     {
         for(int j = 0; j < tn; j++)
         {
-            colors[i][j] = orig.at<cv::Vec3b>(h / 100.0 * i, w / 100.0 * j);
+            Vec3b clr = orig.at<cv::Vec3b>(h / 100.0 * i, w / 100.0 * j);
+            colors[i][j] = cv::Scalar({(double)clr[0], (double)clr[1], (double)clr[2]});
         }
     }
 
