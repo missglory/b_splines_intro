@@ -5,6 +5,8 @@ using std::cout;
 using std::endl;
 int w3, h3;
 std::vector<cv::Point> controlPoints;
+//const std::vector<cv::Point> originalPoints;
+
 Mat orig;
 const std::string name = "Display Image";
 static float eps = 0.000001;
@@ -108,8 +110,12 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
                             linePoint += N[q - 1].at<float>(k, ii) * N[q - 1].at<float>(j, i) * controlPoints[j * 4 + k];
                         }
                     }
+                    cv::Point delta = cv::Point(orig.cols / 100.0 * i, orig.rows / 100.0 * ii);
+
+                    cv::Point coordsPoint(i, ii);
 //                    cv::circle(image, linePoint, 1, cv::Scalar(i * 2, 250 - ii * 2, ii + i), 1);
-                    cv::circle(image, linePoint, 1, colors[i][ii], 2);
+                    cv::Scalar color = orig.at<cv::Vec3b>(linePoint.x, linePoint.y);
+                    cv::circle(image, coordsPoint, 1, color, 2);
                 }
             }
 
@@ -130,7 +136,6 @@ int main(int argc, char** argv )
     image = imread("../../girl.jpg", 1);
 //    image = cv::Mat::zeros(cv::Size(600, 600), CV_8UC4);
 
-
     int w = image.cols;
     int h = image.rows;
     w /= 2;
@@ -144,12 +149,13 @@ int main(int argc, char** argv )
     {
         for(int j = 0; j < tn; j++)
         {
-            Vec3b clr = orig.at<cv::Vec3b>(h / 100.0 * i, w / 100.0 * j);
-            colors[i][j] = cv::Scalar({(double)clr[0], (double)clr[1], (double)clr[2]});
+            colors[i][j] = orig.at<cv::Vec3b>(h / 100.0 * i, w / 100.0 * j);
         }
     }
 
+
     UserData ud;
+
     ud.image = image;
     ud.orig = orig;
     for (int i = 0; i < N.size(); i++)
