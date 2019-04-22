@@ -96,12 +96,18 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 
             for (int i = 0; i < tn; i++)
             {
-                cv::Point linePoint(0,0);
-                for (int j = 0; j < n; j++)
+                for (int ii = 0; ii < tn; ii++)
                 {
-                    linePoint += N[q - 1].at<float>(j, i) * controlPoints[j + 4];
+                    cv::Point linePoint(0,0);
+                    for (int j = 0; j < n; j++)
+                    {
+                        for (int k = 0; k < n; k++)
+                        {
+                            linePoint += N[q - 1].at<float>(k, ii) * N[q - 1].at<float>(j, i) * controlPoints[j * 4 + k];
+                        }
+                    }
+                    cv::circle(image, linePoint, 1, cv::Scalar(i * 2, 250 - i * 2, ii + i), 1);
                 }
-                cv::circle(image, linePoint, 1, cv::Scalar(10, 250, 10), 1);
             }
 
             for (auto point : controlPoints)
