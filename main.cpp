@@ -4,7 +4,7 @@ using namespace cv;
 using std::cout;
 using std::endl;
 int w3, h3;
-std::vector<cv::Point> controlPoints;
+std::vector<cv::Point2f> controlPoints;
 //const std::vector<cv::Point> originalPoints;
 
 Mat orig;
@@ -14,7 +14,8 @@ static float eps = 0.000001;
 struct UserData {
     Mat orig;
     Mat image;
-    cv::Mat basisMatrix;
+    cv::Mat Nx;
+    cv::Mat Ny;
 //    UserData(Mat& im, Mat& o)
 //    {
 //    }
@@ -51,14 +52,14 @@ std::vector<std::vector<cv::Scalar> >colors(100, std::vector<cv::Scalar>(100));
 void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 {
     static int activeCP = -1;
-    static cv::Point startP(0,0);
-    cv::Point currentP(x,y);
-    int px = x / w3;
-    int py = y / h3;
+    static cv::Point2f startP(0,0);
+    cv::Point2f currentP(x,y);
     UserData* ud = (UserData*) userdata;
     Mat& image = ud->image;
     Mat& orig = ud->orig;
-    Mat& N = ud->basisMatrix;
+    float w = image.cols;
+    float h = image.rows;
+    Mat& N = ud->Nx;
     if ( event == EVENT_LBUTTONUP)
     {
         activeCP = -1;
@@ -70,7 +71,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
             if (cv::norm(currentP - controlPoints[i]) < 10)
             {
                 activeCP = i;
-                startP = {x,y};
+                startP = {(float)x, (float)y};
             }
         }
     }
@@ -87,7 +88,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
             {
                 for (int ii = 0; ii < tn; ii++)
                 {
-                    cv::Point linePoint(0,0);
+                    cv::Point2f linePoint(0,0);
                     for (int j = 0; j < n; j++)
                     {
                         for (int k = 0; k < n; k++)
@@ -95,8 +96,8 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
                             linePoint += N.at<float>(k, ii) * N.at<float>(j, i) * controlPoints[j * 4 + k];
                         }
                     }
-                    cv::Point coordsPoint(orig.cols / 100.0 * ii, orig.rows / 100.0 * i);
-                    cv::Point delta = 2 * coordsPoint - linePoint;
+                    cv::Point2f coordsPoint(orig.cols / 100.0 * ii, orig.rows / 100.0 * i);
+                    cv::Point2f delta = 2 * coordsPoint - linePoint;
                     cv::Scalar color = orig.at<cv::Vec3b>(delta.y, delta.x);
                     cv::circle(image, coordsPoint, 1, color, 2);
                 }
@@ -110,6 +111,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
         }
     }
 }
+
 
 
 std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn)
@@ -161,8 +163,8 @@ int main(int argc, char** argv )
     image = imread("../../girl.jpg", 1);
 //    image = cv::Mat::zeros(cv::Size(600, 600), CV_8UC4);
 
-    int w = image.cols;
-    int h = image.rows;
+    float w = image.cols;
+    float h = image.rows;
     w /= 2;
     h /= 2;
     cv::resize(image, image, cv::Size(w,h));
@@ -181,10 +183,10 @@ int main(int argc, char** argv )
 
     ud.image = image;
     ud.orig = orig;
-    controlPoints = std::vector<cv::Point>({{0,0},      {w/3,0},    {2*w/3,0},      {w,0},
-                                           {0,h/3},     {w/3,h/3},  {2*w/3,h/3},    {w,h/3},
-                                           {0,2*h/3},   {w/3,2*h/3},{2*w/3,2*h/3},  {w,2*h/3},
-                                           {0,h},       {w/3,h},    {2*w/3,h},      {w,h}});
+    controlPoints = std::vector<cv::Point2f>({{0.,0.},      {w/3,0.},    {2*w/3,0.},      {w,0.},
+                                           {0.,h/3},     {w/3,h/3},  {2*w/3,h/3},    {w,h/3},
+                                           {0.,2*h/3},   {w/3,2*h/3},{2*w/3,2*h/3},  {w,2*h/3},
+                                           {0.,h},       {w/3,h},    {2*w/3,h},      {w,h}});
     if (image.empty())
     {
         printf("No image data \n");
@@ -201,12 +203,14 @@ int main(int argc, char** argv )
 //    namedWindow("n2", cv::WINDOW_FREERATIO );
 
     std::vector<float> localKnots({0,0,0,0.5,1,1,1});
-    std::vector<cv::Mat>N = initBasisFunc(localKnots, n, w);
+    std::vector<cv::Mat>Nx = initBasisFunc(localKnots, n, 100);
+    std::vector<cv::Mat>Ny = initBasisFunc(localKnots, n, h);
 //    imshow("n0", N[0]);
 //    imshow("n1", N[1]);
 //    imshow("n2", N[2]);
-    ud.basisMatrix = N[N.size() - 1];
-//    setMouseCallback(name, CallBackFunc, &ud);
+    ud.Nx = Nx[Nx.size() - 1];
+    ud.Ny = Ny[Ny.size() - 1];
+    setMouseCallback(name, CallBackFunc, &ud);
 
     waitKey(0);
     return 0;
