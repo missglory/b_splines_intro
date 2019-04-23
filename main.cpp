@@ -21,20 +21,6 @@ struct UserData {
 //    }
 };
 
-
-//std::vector<cv::Point> R(cv::Mat& N, std::vector<cv::Point>& P)
-//{
-//    cv::Mat xs(cv::Size(P.size(), 1), cv::DataType<int>::type, cv::Scalar(0));
-//    cv::Mat ys(cv::Size(P.size(), 1), cv::DataType<int>::type, cv::Scalar(0));
-//    for (int i = 0; i < P.size(); i++)
-//    {
-//        cv::Point& p = P[i];
-//        xs.at<int>(i, 0) = p.x;
-//        ys.at<int>(i, 0) = p.y;
-//    }
-
-//}
-
 const int q = 3;
 const int tn = 100;
 const int n = 4;
@@ -59,7 +45,8 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
     Mat& orig = ud->orig;
     float w = image.cols;
     float h = image.rows;
-    Mat& N = ud->Nx;
+    Mat& Nx = ud->Nx;
+    Mat& Ny = ud->Ny;
     if ( event == EVENT_LBUTTONUP)
     {
         activeCP = -1;
@@ -84,19 +71,19 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 
             orig.copyTo(image);
 
-            for (int i = 0; i < tn; i++)
+            for (int i = 0; i < 100; i++)
             {
-                for (int ii = 0; ii < tn; ii++)
+                for (int ii = 0; ii < 200; ii++)
                 {
                     cv::Point2f linePoint(0,0);
                     for (int j = 0; j < n; j++)
                     {
                         for (int k = 0; k < n; k++)
                         {
-                            linePoint += N.at<float>(k, ii) * N.at<float>(j, i) * controlPoints[j * 4 + k];
+                            linePoint += Nx.at<float>(k, ii) * Ny.at<float>(j, i) * controlPoints[j * 4 + k];
                         }
                     }
-                    cv::Point2f coordsPoint(orig.cols / 100.0 * ii, orig.rows / 100.0 * i);
+                    cv::Point2f coordsPoint(w / 200.0 * ii, h / 100.0 * i);
                     cv::Point2f delta = 2 * coordsPoint - linePoint;
                     cv::Scalar color = orig.at<cv::Vec3b>(delta.y, delta.x);
                     cv::circle(image, coordsPoint, 1, color, 2);
@@ -170,6 +157,15 @@ int main(int argc, char** argv )
     cv::resize(image, image, cv::Size(w,h));
     image.copyTo(orig);
 
+
+    cv::Mat p(cv::Size(2, 4), CV_32F, cv::Scalar(0));
+    cv::Mat nn(cv::Size(4, 5), CV_32F, cv::Scalar(0));
+
+//    cv::Mat res = nn * p;
+
+
+
+
     for (int i = 0; i < tn; i++)
     {
         for(int j = 0; j < tn; j++)
@@ -198,16 +194,16 @@ int main(int argc, char** argv )
     }
     namedWindow(name, WINDOW_AUTOSIZE );
     imshow(name, image);
-//    namedWindow("n0", cv::WINDOW_FREERATIO );
-//    namedWindow("n1", cv::WINDOW_FREERATIO );
-//    namedWindow("n2", cv::WINDOW_FREERATIO );
+    namedWindow("n0", cv::WINDOW_FREERATIO );
+    namedWindow("n1", cv::WINDOW_FREERATIO );
+    namedWindow("n2", cv::WINDOW_FREERATIO );
 
     std::vector<float> localKnots({0,0,0,0.5,1,1,1});
-    std::vector<cv::Mat>Nx = initBasisFunc(localKnots, n, 100);
-    std::vector<cv::Mat>Ny = initBasisFunc(localKnots, n, h);
-//    imshow("n0", N[0]);
-//    imshow("n1", N[1]);
-//    imshow("n2", N[2]);
+    std::vector<cv::Mat>Nx = initBasisFunc(localKnots, n, 200);
+    std::vector<cv::Mat>Ny = initBasisFunc(localKnots, n, 100);
+    imshow("n0", Ny[0]);
+    imshow("n1", Ny[1]);
+    imshow("n2", Ny[2]);
     ud.Nx = Nx[Nx.size() - 1];
     ud.Ny = Ny[Ny.size() - 1];
     setMouseCallback(name, CallBackFunc, &ud);
