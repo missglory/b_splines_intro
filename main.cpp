@@ -22,13 +22,15 @@ const int n = 15;
 std::vector<float> knots({0.0, 1.0 / 18, 2.0 / 18, 3.0 / 18, 4.0 / 18, 5.0 / 18,
                          6.0 / 18, 7.0/ 18, 8.0 / 18, 9.0 / 18, 10.0 / 18, 11.0 / 18,
                          12.0/18, 13./18, 14./18, 15./18, 16./18, 17./18, 1.});
+const int n2 = 2;
+std::vector<float> knots2({0., 0., 0., 1., 1., 1.});
 //std::vector<int> knots({0, 0, 0, 50, 100, 100, 100});
 //std::vector<int> knots({0, 20, 40, 60, 80, 100});
 
 int dimsN[] = {tn, n, q};
 std::vector<cv::Mat> N;
 
-std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn)
+std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn, bool circle = 0)
 {
     std::vector<cv::Mat>N (q, cv::Mat::zeros(cv::Size(tn, n + q), CV_32F));
     float t = (knots[0] + eps) * tn;
@@ -70,42 +72,43 @@ std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn)
         }
     }
 
-#define CIRCLE
-#ifdef CIRCLE
-    int gi = 0;
-    for (int i = 0; i < tn; i++)
+    if (circle)
     {
-        if (N[q - 1].at<float>(1, i) > N[q - 1].at<float>(1, i + 1))
+        int gi = 0;
+        for (int i = 0; i < tn; i++)
         {
-            gi = i;
-            break;
+            if (N[q - 1].at<float>(1, i) > N[q - 1].at<float>(1, i + 1))
+            {
+                gi = i;
+                break;
+            }
         }
-    }
-//    int ei = tn - 1;
-//    for (int i = tn - 1; i > -1; i--)
-//    {
-//        if (N[q - 1].at<float>(n - 1, i) < N[q - 1].at<float>(n - 1, i + 1))
-//        {
-//            ei = i;
-//            break;
-//        }
-//    }
+        //    int ei = tn - 1;
+        //    for (int i = tn - 1; i > -1; i--)
+        //    {
+        //        if (N[q - 1].at<float>(n - 1, i) < N[q - 1].at<float>(n - 1, i + 1))
+        //        {
+        //            ei = i;
+        //            break;
+        //        }
+        //    }
 
-    namedWindow("roil", cv::WINDOW_FREERATIO );
-    namedWindow("roir", cv::WINDOW_FREERATIO );
-    cv::Rect roirectR(0, 0, gi /*+ 1*/, n + 1);
-//    cv::Rect roirectL(ei + 1, 0,
-//                     tn - ei, n + q - 1);
-    cv::Rect roirectL(tn - gi, 0, gi, n + 1);
-    cv::Mat roiR = N[q - 1](roirectR);
-    cv::Mat roiL = N[q - 1](roirectL);
-    cv::Mat roiCp;
-    roiR.copyTo(roiCp);
-    roiR += roiL;
-    roiL += roiCp;
-    imshow("roir", roiR);
-    imshow("roil", roiL);
-#endif
+        namedWindow("roil", cv::WINDOW_FREERATIO );
+        namedWindow("roir", cv::WINDOW_FREERATIO );
+        cv::Rect roirectR(0, 0, gi /*+ 1*/, n + 1);
+        //    cv::Rect roirectL(ei + 1, 0,
+        //                     tn - ei, n + q - 1);
+        cv::Rect roirectL(tn - gi, 0, gi, n + 1);
+        cv::Mat roiR = N[q - 1](roirectR);
+        cv::Mat roiL = N[q - 1](roirectL);
+        cv::Mat roiCp;
+        roiR.copyTo(roiCp);
+        roiR += roiL;
+        roiL += roiCp;
+        imshow("roir", roiR);
+        imshow("roil", roiL);
+    }
+
     cv::normalize(N[q - 1], N[q - 1], 0., 1., NORM_MINMAX, CV_32F);
 
     return N;
@@ -137,7 +140,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
             {
                 activeCP = i;
                 startP = {(float)x,(float)y};
-                cout << "active " << activeCP << endl;
+//                cout << "active " << activeCP << endl;
             }
         }
     }
@@ -235,12 +238,15 @@ int main(int argc, char** argv )
     cout.precision(3);
 
 
-    N = initBasisFunc(knots, n, tn);
-    for (int j = 0; j < n + q + 1; j++)
+    N = initBasisFunc(knots, n, tn, 1);
+
+    std::vector<cv::Mat> Nn = initBasisFunc(knots2, 3, tn);
+
+    for (int j = 0; j < n2 + q; j++)
     {
         cout << "[";
         for (int i = 0; i < tn; i++)
-            cout << N[2].at<float>(j,i) << ", ";
+            cout << Nn[2].at<float>(j,i) << ", ";
         cout << "], "<< endl;
     }
 
