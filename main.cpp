@@ -9,7 +9,7 @@ std::vector<cv::Point2f> controlPoints;
 
 Mat orig;
 const std::string name = "Display Image";
-static float eps = 0.000001;
+static float eps = 0.0001;
 
 struct UserData {
     Mat orig;
@@ -104,12 +104,13 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 
 std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn)
 {
-    std::vector<cv::Mat>N (q, cv::Mat::zeros(cv::Size(tn, n), CV_32F));
-    for (int i = 0; i < n + 1; i++)
+    std::vector<cv::Mat>N (q, cv::Mat::zeros(cv::Size(tn, n + q), CV_32F));
+    float t = (knots[0] + eps) * tn;
+    for (int i = 0; i < knots.size() - 1; i++)
     {
         if (knots[i+1] - knots[i] > 0)
         {
-            float t = (knots[i] + eps) * tn;
+            float r = knots[i+1] * tn;
             while (t < knots[i+1] * tn)
             {
                 N[0].at<float>(i, t++) = 1.0;
@@ -119,7 +120,7 @@ std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn)
 
     for (int dq = 1; dq < 3; dq++)
     {
-        for (int j = 0; j < n + dq - 1; j++)
+        for (int j = 0; j < n + q - dq; j++)
         {
             for (int i = 0; i < tn; i++)
             {
@@ -130,16 +131,20 @@ std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn)
                 float del2 = knots[j + dq + 1] - knots[j + 1];
                 float dist1 = t - knots[j];
                 float dist2 = (knots[j + dq + 1] - t);
+                float res = 0;
                 if (del1 > eps && mul1 > eps)
                 {
-                    N[dq].at<float>(j, i) = dist1 / del1 * mul1;
+                    res = dist1 / del1 * mul1;
                 }
                 if (del2 > eps && mul2 > eps) {
-                    N[dq].at<float>(j, i) += dist2 / del2 * mul2;
+                    res += dist2 / del2 * mul2;
                 }
+                N[dq].at<float>(j, i) = res;
             }
         }
     }
+
+    cv::normalize(N[q - 1], N[q - 1], 0., 1., NORM_MINMAX, CV_32F);
 
     return N;
 }
@@ -199,12 +204,22 @@ int main(int argc, char** argv )
     namedWindow("n1", cv::WINDOW_FREERATIO );
     namedWindow("n2", cv::WINDOW_FREERATIO );
 
-    std::vector<float> localKnots({0,0,0,0.5,1,1,1});
+    std::vector<float> localKnots({0,0,0,0.5, 1,1,1});
     std::vector<cv::Mat>Nx = initBasisFunc(localKnots, n, w);
     std::vector<cv::Mat>Ny = initBasisFunc(localKnots, n, h);
     imshow("n0", Ny[0]);
     imshow("n1", Ny[1]);
     imshow("n2", Ny[2]);
+    std::cout.setf( std::ios::fixed, std:: ios::floatfield );
+    cout.precision(3);
+    for (int j = 0; j < n + q + 1; j++)
+    {
+        cout << "[";
+        for (int i = 0; i < h; i++)
+            cout << Ny[2].at<float>(j,i) << ", ";
+        cout << "], "<< endl;
+    }
+
     ud.Nx = Nx[Nx.size() - 1];
     ud.Ny = Ny[Ny.size() - 1];
     setMouseCallback(name, CallBackFunc, &ud);
