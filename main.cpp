@@ -5,8 +5,6 @@ using std::cout;
 using std::endl;
 int w3, h3;
 std::vector<cv::Point2f> controlPoints;
-//const std::vector<cv::Point> originalPoints;
-
 Mat orig;
 const std::string name = "Display Image";
 static float eps = 0.0001;
@@ -16,24 +14,26 @@ struct UserData {
     Mat image;
     cv::Mat Nx;
     cv::Mat Ny;
-//    UserData(Mat& im, Mat& o)
-//    {
-//    }
 };
 
 const int q = 3;
 const int tn = 100;
 const int n = 4;
 
-//std::vector<float> knots({0,0,0,0.5,1,1,1});
-//std::vector<float> knots({0.0, 0.2, 0.4, 0.6, 0.8, 1.0});
-//std::vector<int> knots({0, 0, 0, 50, 100, 100, 100});
-
-std::vector<std::vector<cv::Scalar> >colors(100, std::vector<cv::Scalar>(100));
-//cv::Mat src_image;/// CV_8UC3
-//cv::Mat img_float;
-//src_image.converTo(img_float, CV_32FC3, 1 / 255.O);
-
+cv::Vec3f bilinInterp(const cv::Mat &I, double x, double y)
+{
+    int x1 = std::max(0,(int)std::floor(x));
+    int y1 = std::max(0,(int)std::floor(y));
+    int x2 = std::min(I.cols, (int)std::ceil(x));
+    int y2 = std::min(I.rows, (int)std::ceil(y));
+    const Vec3f p1 = I.at<Vec3f>(y1, x1);
+    const Vec3f p2 = I.at<Vec3f>(y1, x2);
+    const Vec3f p3 = I.at<Vec3f>(y2, x1);
+    const Vec3f p4 = I.at<Vec3f>(y2, x2);
+    Vec3f c1 = p1 + (p2 - p1) * (x - x1);
+    Vec3f c2 = p3 + (p4 - p3) * (x - x1);
+    return c1 + (c2 - c1) * (y - y1);
+}
 
 void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 {
@@ -85,15 +85,14 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
                     }
                     cv::Point2f coordsPoint(ii, i);
                     cv::Point2f delta = 2 * coordsPoint - linePoint;
-                    cv::Scalar color = orig.at<cv::Vec3b>(delta.y, delta.x);
-//                    cv::circle(image, coordsPoint, 1, color, 2);
-                    image.at<Vec3b>(i, ii) = orig.at<cv::Vec3b>(delta.y, delta.x);
+                    cv::Scalar color = orig.at<cv::Vec3f>(delta.y, delta.x);
+                    image.at<Vec3f>(i, ii) = bilinInterp(orig, delta.x, delta.y);
                 }
             }
 
             for (auto point : controlPoints)
             {
-                cv::circle(image, point, 5, cv::Scalar(10, 10,250), 10);
+                cv::circle(image, point, 5, cv::Scalar(.1, .1, 1.), 10);
             }
             imshow(name, image);
         }
@@ -154,7 +153,8 @@ int main(int argc, char** argv )
 {
     Mat image;
     image = imread("../../girl.jpg", 1);
-//    image = cv::Mat::zeros(cv::Size(600, 600), CV_8UC4);
+    image.convertTo(image, CV_32FC3, 1. / 255.0);
+    //    image = cv::Mat::zeros(cv::Size(600, 600), CV_8UC4);
 
     float w = image.cols;
     float h = image.rows;
@@ -163,26 +163,7 @@ int main(int argc, char** argv )
     cv::resize(image, image, cv::Size(w,h));
     image.copyTo(orig);
 
-
-    cv::Mat p(cv::Size(2, 4), CV_32F, cv::Scalar(0));
-    cv::Mat nn(cv::Size(4, 5), CV_32F, cv::Scalar(0));
-
-//    cv::Mat res = nn * p;
-
-
-
-
-    for (int i = 0; i < tn; i++)
-    {
-        for(int j = 0; j < tn; j++)
-        {
-            Vec3b clr = orig.at<cv::Vec3b>(h / 100.0 * i, w / 100.0 * j);
-            colors[i][j] = cv::Scalar({(double)clr[0], (double)clr[1], (double)clr[2]});
-        }
-    }
-
     UserData ud;
-
     ud.image = image;
     ud.orig = orig;
     controlPoints = std::vector<cv::Point2f>({{0.,0.},      {w/3,0.},    {2*w/3,0.},      {w,0.},
@@ -200,25 +181,26 @@ int main(int argc, char** argv )
     }
     namedWindow(name, WINDOW_AUTOSIZE );
     imshow(name, image);
-    namedWindow("n0", cv::WINDOW_FREERATIO );
-    namedWindow("n1", cv::WINDOW_FREERATIO );
-    namedWindow("n2", cv::WINDOW_FREERATIO );
+//    namedWindow("n0", cv::WINDOW_FREERATIO );
+//    namedWindow("n1", cv::WINDOW_FREERATIO );
+//    namedWindow("n2", cv::WINDOW_FREERATIO );
 
-    std::vector<float> localKnots({0,0,0,0.5, 1,1,1});
+    std::vector<float> localKnots({0,0,0,0.5,1,1,1});
     std::vector<cv::Mat>Nx = initBasisFunc(localKnots, n, w);
     std::vector<cv::Mat>Ny = initBasisFunc(localKnots, n, h);
-    imshow("n0", Ny[0]);
-    imshow("n1", Ny[1]);
-    imshow("n2", Ny[2]);
-    std::cout.setf( std::ios::fixed, std:: ios::floatfield );
-    cout.precision(3);
-    for (int j = 0; j < n + q + 1; j++)
-    {
-        cout << "[";
-        for (int i = 0; i < h; i++)
-            cout << Ny[2].at<float>(j,i) << ", ";
-        cout << "], "<< endl;
-    }
+//    imshow("n0", Ny[0]);
+//    imshow("n1", Ny[1]);
+//    imshow("n2", Ny[2]);
+
+//    std::cout.setf( std::ios::fixed, std:: ios::floatfield );
+//    cout.precision(3);
+//    for (int j = 0; j < n + q + 1; j++)
+//    {
+//        cout << "[";
+//        for (int i = 0; i < h; i++)
+//            cout << Ny[2].at<float>(j,i) << ", ";
+//        cout << "], "<< endl;
+//    }
 
     ud.Nx = Nx[Nx.size() - 1];
     ud.Ny = Ny[Ny.size() - 1];
