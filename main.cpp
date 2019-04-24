@@ -3,7 +3,7 @@
 using namespace cv;
 using std::cout;
 using std::endl;
-std::vector<cv::Point> controlPoints;
+std::vector<cv::Point2f> controlPoints;
 Mat orig;
 const std::string name = "Display Image";
 static float eps = 0.0001;
@@ -70,7 +70,42 @@ std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn)
         }
     }
 
-//    cv::normalize(N[0], N[0], 0., 1., NORM_MINMAX, CV_32F);
+#define CIRCLE
+#ifdef CIRCLE
+    int gi = 0;
+    for (int i = 0; i < tn; i++)
+    {
+        if (N[q - 1].at<float>(1, i) > N[q - 1].at<float>(1, i + 1))
+        {
+            gi = i;
+            break;
+        }
+    }
+//    int ei = tn - 1;
+//    for (int i = tn - 1; i > -1; i--)
+//    {
+//        if (N[q - 1].at<float>(n - 1, i) < N[q - 1].at<float>(n - 1, i + 1))
+//        {
+//            ei = i;
+//            break;
+//        }
+//    }
+
+    namedWindow("roil", cv::WINDOW_FREERATIO );
+    namedWindow("roir", cv::WINDOW_FREERATIO );
+    cv::Rect roirectR(0, 0, gi /*+ 1*/, n + 1);
+//    cv::Rect roirectL(ei + 1, 0,
+//                     tn - ei, n + q - 1);
+    cv::Rect roirectL(tn - gi, 0, gi, n + 1);
+    cv::Mat roiR = N[q - 1](roirectR);
+    cv::Mat roiL = N[q - 1](roirectL);
+    cv::Mat roiCp;
+    roiR.copyTo(roiCp);
+    roiR += roiL;
+    roiL += roiCp;
+    imshow("roir", roiR);
+    imshow("roil", roiL);
+#endif
     cv::normalize(N[q - 1], N[q - 1], 0., 1., NORM_MINMAX, CV_32F);
 
     return N;
@@ -80,8 +115,8 @@ std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn)
 void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 {
     static int activeCP = -1;
-    static cv::Point startP(0,0);
-    cv::Point currentP(x,y);
+    static cv::Point2f startP(0,0);
+    cv::Point2f currentP(x,y);
     UserData* ud = (UserData*) userdata;
     Mat& image = ud->image;
     float w = image.cols;
@@ -101,7 +136,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
             if (cv::norm(currentP - controlPoints[i]) < 10)
             {
                 activeCP = i;
-                startP = {x,y};
+                startP = {(float)x,(float)y};
                 cout << "active " << activeCP << endl;
             }
         }
@@ -118,7 +153,16 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 
             for (int i = 0; i < tn ; i++)
             {
-                cv::Point linePoint(0,0);
+                float norm = 0;
+                for (int j = 0; j < n; j++)
+                {
+                    norm += N[q - 1].at<float>(j, i);
+                }
+                cv::Point2f linePoint(0,0);
+                if(norm < 1)
+                {
+                    linePoint += cv::Point2f(w/2*(1 - norm), h/2*(1-norm));
+                }
                 for (int j = 0; j < n; j++)
                 {
                     float mul = N[q - 1].at<float>(j, i);
