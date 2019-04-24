@@ -17,6 +17,10 @@ const int q = 3;
 const int tn = 100;
 const int n = 15;
 
+const cv::Point2f originalPivot(100, 100);
+cv::Point2f pivot = originalPivot;
+const int pivotId = 21486234;
+
 //std::vector<float> knots({0,0,0,0.5,1,1,1});
 //std::vector<float> knots({0.0, 0.2, 0.4, 0.6, 0.8, 1.0});
 std::vector<float> knots({0.0, 1.0 / 18, 2.0 / 18, 3.0 / 18, 4.0 / 18, 5.0 / 18,
@@ -77,7 +81,7 @@ std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn, boo
         int gi = 0;
         for (int i = 0; i < tn; i++)
         {
-            if (N[q - 1].at<float>(1, i) > N[q - 1].at<float>(1, i + 1))
+            if (N[q - 1].at<float>(2, i) > N[q - 1].at<float>(2, i + 1))
             {
                 gi = i;
                 break;
@@ -95,10 +99,10 @@ std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn, boo
 
         namedWindow("roil", cv::WINDOW_FREERATIO );
         namedWindow("roir", cv::WINDOW_FREERATIO );
-        cv::Rect roirectR(0, 0, gi + 1, n + 1);
+        cv::Rect roirectR(0, 0, gi, n + 1);
         //    cv::Rect roirectL(ei + 1, 0,
         //                     tn - ei, n + q - 1);
-        cv::Rect roirectL(tn - gi - 1, 0, gi + 1, n + 1);
+        cv::Rect roirectL(tn - gi , 0, gi, n + 1);
         cv::Mat roiR = N[q - 1](roirectR);
         cv::Mat roiL = N[q - 1](roirectL);
         cv::Mat roiCp;
@@ -134,6 +138,12 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
     }
     if ( event == EVENT_LBUTTONDOWN)
     {
+        if (cv::norm(currentP - pivot) < 10)
+        {
+            activeCP = pivotId;
+            startP = {(float)x,(float)y};
+        }
+
         for (int i = 0; i < controlPoints.size(); i++)
         {
             if (cv::norm(currentP - controlPoints[i]) < 10)
@@ -150,7 +160,22 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
         //      cout << "Part(" << px << ", " << py << ")" << endl;
         if (activeCP > -1)
         {
-            controlPoints[activeCP] = currentP;
+            if (activeCP == pivotId)
+            {
+                for (int i = 0; i < controlPoints.size(); i++)
+                {
+                    controlPoints[i] -= pivot - originalPivot;
+                }
+                pivot = currentP;
+                for (int i = 0; i < controlPoints.size(); i++)
+                {
+                    controlPoints[i] += pivot - originalPivot;
+                }
+            }
+            else
+            {
+                controlPoints[activeCP] = currentP;
+            }
 
             orig.copyTo(image);
 
@@ -186,6 +211,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
             {
                 cv::circle(image, point, 5, cv::Scalar(10, 10,250), 10);
             }
+            cv::circle(image, pivot, 5, cv::Scalar(10, 250, 0), 10);
             imshow(name, image);
         }
     }
