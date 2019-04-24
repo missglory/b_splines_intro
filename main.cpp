@@ -71,9 +71,9 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 
             orig.copyTo(image);
 
-            for (int i = 0; i < 100; i++)
+            for (int i = 0; i < h; i++)
             {
-                for (int ii = 0; ii < 200; ii++)
+                for (int ii = 0; ii < w; ii++)
                 {
                     cv::Point2f linePoint(0,0);
                     for (int j = 0; j < n; j++)
@@ -83,10 +83,11 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
                             linePoint += Nx.at<float>(k, ii) * Ny.at<float>(j, i) * controlPoints[j * 4 + k];
                         }
                     }
-                    cv::Point2f coordsPoint(w / 200.0 * ii, h / 100.0 * i);
+                    cv::Point2f coordsPoint(ii, i);
                     cv::Point2f delta = 2 * coordsPoint - linePoint;
                     cv::Scalar color = orig.at<cv::Vec3b>(delta.y, delta.x);
-                    cv::circle(image, coordsPoint, 1, color, 2);
+//                    cv::circle(image, coordsPoint, 1, color, 2);
+                    image.at<Vec3b>(i, ii) = orig.at<cv::Vec3b>(delta.y, delta.x);
                 }
             }
 
@@ -199,8 +200,8 @@ int main(int argc, char** argv )
     namedWindow("n2", cv::WINDOW_FREERATIO );
 
     std::vector<float> localKnots({0,0,0,0.5,1,1,1});
-    std::vector<cv::Mat>Nx = initBasisFunc(localKnots, n, 200);
-    std::vector<cv::Mat>Ny = initBasisFunc(localKnots, n, 100);
+    std::vector<cv::Mat>Nx = initBasisFunc(localKnots, n, w);
+    std::vector<cv::Mat>Ny = initBasisFunc(localKnots, n, h);
     imshow("n0", Ny[0]);
     imshow("n1", Ny[1]);
     imshow("n2", Ny[2]);
