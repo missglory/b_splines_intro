@@ -22,13 +22,13 @@ const int n = 15;
 std::vector<float> knots({0.0, 1.0 / 18, 2.0 / 18, 3.0 / 18, 4.0 / 18, 5.0 / 18,
                          6.0 / 18, 7.0/ 18, 8.0 / 18, 9.0 / 18, 10.0 / 18, 11.0 / 18,
                          12.0/18, 13./18, 14./18, 15./18, 16./18, 17./18, 1.});
-const int n2 = 2;
+const int n2 = 3;
 std::vector<float> knots2({0., 0., 0., 1., 1., 1.});
 //std::vector<int> knots({0, 0, 0, 50, 100, 100, 100});
 //std::vector<int> knots({0, 20, 40, 60, 80, 100});
 
 int dimsN[] = {tn, n, q};
-std::vector<cv::Mat> N;
+std::vector<cv::Mat> N, Nn;
 
 std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn, bool circle = 0)
 {
@@ -95,10 +95,10 @@ std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn, boo
 
         namedWindow("roil", cv::WINDOW_FREERATIO );
         namedWindow("roir", cv::WINDOW_FREERATIO );
-        cv::Rect roirectR(0, 0, gi /*+ 1*/, n + 1);
+        cv::Rect roirectR(0, 0, gi + 1, n + 1);
         //    cv::Rect roirectL(ei + 1, 0,
         //                     tn - ei, n + q - 1);
-        cv::Rect roirectL(tn - gi, 0, gi, n + 1);
+        cv::Rect roirectL(tn - gi - 1, 0, gi + 1, n + 1);
         cv::Mat roiR = N[q - 1](roirectR);
         cv::Mat roiL = N[q - 1](roirectL);
         cv::Mat roiCp;
@@ -156,22 +156,30 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 
             for (int i = 0; i < tn ; i++)
             {
-                float norm = 0;
-                for (int j = 0; j < n; j++)
+                for (int ii = 0; ii < tn; ii++)
                 {
-                    norm += N[q - 1].at<float>(j, i);
+                    cv::Point2f linePoint(0,0);
+//                    float norm = 0;
+//                    for (int j = 0; j < n; j++)
+//                    {
+//                        norm += N[q - 1].at<float>(j, i);
+//                    }
+//                    if(norm < 1 - eps)
+//                    {
+//                        linePoint += cv::Point2f(w/2*(1 - norm), h/2*(1-norm));
+//                    }
+                    for (int j = 0; j < n; j++)
+                    {
+                        for (int k = 0; k < n2; k++)
+                        {
+                            float mul1 = Nn[q - 1].at<float>(k, ii);
+                            float mul2 = N[q - 1].at<float>(j, i);
+                            cv::Point2f mul3 = controlPoints[j * n + k];
+                            linePoint += Nn[q - 1].at<float>(k, ii) * N[q - 1].at<float>(j, i) * controlPoints[j+ k * n];
+                        }
+                    }
+                    cv::circle(image, linePoint, 1, cv::Scalar(10, 250 - 2 * i, 10 + 2 * i), 1);
                 }
-                cv::Point2f linePoint(0,0);
-                if(norm < 1)
-                {
-                    linePoint += cv::Point2f(w/2*(1 - norm), h/2*(1-norm));
-                }
-                for (int j = 0; j < n; j++)
-                {
-                    float mul = N[q - 1].at<float>(j, i);
-                    linePoint += N[q - 1].at<float>(j, i) * controlPoints[j];
-                }
-                cv::circle(image, linePoint, 1, cv::Scalar(10, 250 - 2 * i, 10 + 2 * i), 1);
             }
 
             for (auto point : controlPoints)
@@ -197,15 +205,21 @@ int main(int argc, char** argv )
     w /= 2;
     h /= 2;
     cv::resize(image, image, cv::Size(w,h));
-    controlPoints.resize(n);
+    controlPoints.resize(3 * n);
     cv::Point2f center(w/2, h/2);
-    for (int i = 0; i < controlPoints.size(); i++)
+    for (int i = 0; i < n; i++)
     {
         float amp = 100;
-        float angle = (float)i / controlPoints.size() * 2 * 3.14;
+        float amp2 = 1.4;
+        float angle = (float)i / n * 2 * 3.14;
         cv::Point2f vec(amp * cos(angle), amp * sin(angle));
 //        cv::circle(image, vec + center, 5, cv::Scalar(10, 10,250), 10);
         controlPoints[i] = vec + center;
+        vec *= amp2;
+        controlPoints[n + i] = vec + center;
+        vec *= amp2;
+        controlPoints[2 * n + i] = vec + center;
+
     }
 
     image.copyTo(orig);
@@ -240,7 +254,7 @@ int main(int argc, char** argv )
 
     N = initBasisFunc(knots, n, tn, 1);
 
-    std::vector<cv::Mat> Nn = initBasisFunc(knots2, 3, tn);
+    Nn = initBasisFunc(knots2, n2, tn);
 
     for (int j = 0; j < n2 + q; j++)
     {
