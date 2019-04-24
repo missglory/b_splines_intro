@@ -38,11 +38,19 @@ cv::Vec3f bilinInterp(const cv::Mat &I, double x, double y)
 cv::Point2f computePoint(const cv::Mat& Nx, const cv::Mat& Ny, std::vector<cv::Point2f>& controlPoints, int x, int y)
 {
     cv::Point2f ret(0, 0);
+    float normalize = 0;
     for (int j = 0; j < n; j++)
     {
         for (int k = 0; k < n; k++)
         {
-            ret += Nx.at<float>(k, x) * Ny.at<float>(j, y) * controlPoints[j * 4 + k];
+            normalize += Nx.at<float>(k, x) * Ny.at<float>(j, y );
+        }
+    }
+    for (int j = 0; j < n; j++)
+    {
+        for (int k = 0; k < n; k++)
+        {
+            ret += Nx.at<float>(k, x) * Ny.at<float>(j, y) * controlPoints[j * 4 + k] / normalize;
         }
     }
     return ret;
@@ -91,8 +99,8 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
                     cv::Point2f linePoint = computePoint(Nx, Ny, controlPoints, ii, i);
                     cv::Point2f coordsPoint(ii, i);
                     cv::Point2f delta = 2 * coordsPoint - linePoint;
-                    cv::Scalar color = orig.at<cv::Vec3f>(delta.y, delta.x);
                     image.at<Vec3f>(i, ii) = bilinInterp(orig, delta.x, delta.y);
+//                    image.at<Vec3f>(i, ii) = orig.at<cv::Vec3f>(delta.y, delta.x);
                 }
             }
 
@@ -191,7 +199,7 @@ int main(int argc, char** argv )
 //    namedWindow("n1", cv::WINDOW_FREERATIO );
 //    namedWindow("n2", cv::WINDOW_FREERATIO );
 
-    std::vector<float> localKnots({0,0,0,0.5,1,1,1});
+    std::vector<float> localKnots({0, 0, 0, 0.5, 1, 1, 1});
     std::vector<cv::Mat>Nx = initBasisFunc(localKnots, n, w);
     std::vector<cv::Mat>Ny = initBasisFunc(localKnots, n, h);
 //    imshow("n0", Ny[0]);
