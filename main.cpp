@@ -35,6 +35,19 @@ cv::Vec3f bilinInterp(const cv::Mat &I, double x, double y)
     return c1 + (c2 - c1) * (y - y1);
 }
 
+cv::Point2f computePoint(const cv::Mat& Nx, const cv::Mat& Ny, std::vector<cv::Point2f>& controlPoints, int x, int y)
+{
+    cv::Point2f ret(0, 0);
+    for (int j = 0; j < n; j++)
+    {
+        for (int k = 0; k < n; k++)
+        {
+            ret += Nx.at<float>(k, x) * Ny.at<float>(j, y) * controlPoints[j * 4 + k];
+        }
+    }
+    return ret;
+}
+
 void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 {
     static int activeCP = -1;
@@ -75,14 +88,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
             {
                 for (int ii = 0; ii < w; ii++)
                 {
-                    cv::Point2f linePoint(0,0);
-                    for (int j = 0; j < n; j++)
-                    {
-                        for (int k = 0; k < n; k++)
-                        {
-                            linePoint += Nx.at<float>(k, ii) * Ny.at<float>(j, i) * controlPoints[j * 4 + k];
-                        }
-                    }
+                    cv::Point2f linePoint = computePoint(Nx, Ny, controlPoints, ii, i);
                     cv::Point2f coordsPoint(ii, i);
                     cv::Point2f delta = 2 * coordsPoint - linePoint;
                     cv::Scalar color = orig.at<cv::Vec3f>(delta.y, delta.x);
