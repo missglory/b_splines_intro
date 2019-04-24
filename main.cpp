@@ -31,8 +31,10 @@ std::vector<float> knots2({0., 0., 0., 1., 1., 1.});
 //std::vector<int> knots({0, 0, 0, 50, 100, 100, 100});
 //std::vector<int> knots({0, 20, 40, 60, 80, 100});
 
-int dimsN[] = {tn, n, q};
 std::vector<cv::Mat> N, Nn;
+int tn1 = 200;
+int tn2 = 50;
+
 
 std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn, bool circle = 0)
 {
@@ -81,7 +83,17 @@ std::vector<cv::Mat> initBasisFunc(std::vector<float>& knots, int n, int tn, boo
         int gi = 0;
         for (int i = 0; i < tn; i++)
         {
-            if (N[q - 1].at<float>(2, i) > N[q - 1].at<float>(2, i + 1))
+//            if (N[q - 1].at<float>(1, i) > N[q - 1].at<float>(1, i + 1))
+//            {
+//                gi = i;
+//                break;
+//            }
+            float sum = 0;
+            for (int j = 0; j < n; j++)
+            {
+                sum += N[q - 1].at<float>(j, i);
+            }
+            if (sum > 1 - eps)
             {
                 gi = i;
                 break;
@@ -179,9 +191,9 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 
             orig.copyTo(image);
 
-            for (int i = 0; i < tn ; i++)
+            for (int i = 0; i < tn1 ; i++)
             {
-                for (int ii = 0; ii < tn; ii++)
+                for (int ii = 0; ii < tn2 ; ii++)
                 {
                     cv::Point2f linePoint(0,0);
 //                    float norm = 0;
@@ -277,10 +289,8 @@ int main(int argc, char** argv )
     std::cout.setf( std::ios::fixed, std:: ios::floatfield );
     cout.precision(3);
 
-
-    N = initBasisFunc(knots, n, tn, 1);
-
-    Nn = initBasisFunc(knots2, n2, tn);
+    N = initBasisFunc(knots, n, tn1, 1);
+    Nn = initBasisFunc(knots2, n2, tn2);
 
     for (int j = 0; j < n2 + q; j++)
     {
