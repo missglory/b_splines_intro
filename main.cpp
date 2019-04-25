@@ -15,14 +15,7 @@ struct UserData
 
 float N(const std::vector<float> &knot, float t, int k, int q)
 {
-	if (q == 1) {
-		if (t >= knot[k] && t < knot[k + 1]) {
-			return 1.f;
-		}
-		else {
-			return 0.f;
-		}
-	}
+	if (q == 1) return (t >= knot[k] && t < knot[k + 1]) ? 1.f : 0.f;
 	
 	float div1 = knot[k + q - 1] - knot[k];
 	float div2 = knot[k + q] - knot[k + 1];
