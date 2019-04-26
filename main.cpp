@@ -11,6 +11,7 @@ struct UserData
 	cv::Mat Ny;
 	std::vector<cv::Point2f> controls;
 	std::string window_name;
+    std::vector<float> knots_x, knots_y;
 };
 
 float N(const std::vector<float> &knot, float t, int k, int q)
@@ -53,7 +54,7 @@ cv::Point2f ComputePoint(const cv::Mat& Nx, const cv::Mat& Ny, const std::vector
         norm += Nx.at<float>(i, x);
     }
 //    ret += (1.f - norm) * cv::Point2f(startx, starty);
-    if (norm < 0.99)
+    if (norm < 0.9999)
     {
         return {0.f, 0.f};
     }
@@ -87,6 +88,8 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 	cv::Mat& orig	= ud->orig;
 	cv::Mat& Nx		= ud->Nx;
 	cv::Mat& Ny		= ud->Ny;
+    std::vector<float>& knots_x = ud->knots_x;
+    std::vector<float>& knots_y = ud->knots_y;
 	float w			= image.cols;
 	float h			= image.rows;
 	std::vector<cv::Point2f> &controls = ud->controls;
@@ -108,26 +111,40 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 			controls[activeCP] = currentP;
 			orig.copyTo(image);
 
-            int tn = 100;
+            int tn = 400;
             int tn2 = 50;
-            int n = 14;
+            int n = 17;
+
+            int indx = 0;
+            int indy = 0;
+
             for (int i = 0; i < tn; i++) {
 				cv::Vec3b *p_im = image.ptr<cv::Vec3b>(i);
+
+                while (indx < knots_x.size() && knots_x[indx] < i)
+                {
+                    indx++;
+                }
+
                 for (int j = 0; j < tn2; j++) {
                     cv::Point2f new_coord = ComputePoint(Nx, Ny, controls, i, j, w/2, h/2);
-                    cv::circle(image, new_coord, 3, cv::Scalar(10,250,10), -1);
+                    cv::circle(image, new_coord, 1, cv::Scalar(10,250,indx * 500.f / (knots_x.size() - 3)), -1);
+
 //					cv::Point2f uv_coord = 2 * cv::Point2f(j, i) - new_coord;
 //					p_im[j] = BilinInterp(orig, uv_coord.x, uv_coord.y);
                 }
 			}
 
-			for (auto &pt : controls) {
-				cv::circle(image, pt, 5, cv::Scalar(10, 10, 255), -1);
-			}
-			cv::imshow(name, image);
+            for (auto &pt : controls) {
+                cv::circle(image, pt, 5, cv::Scalar(10, 10, 255), -1);
+            }
+
+            cv::imshow(name, image);
 		}
 	}
 }
+
+
 
 int main()
 {
@@ -146,34 +163,48 @@ int main()
 	};
 
     int n = 14, n2 = 3;
-    controls.resize(3 * n);
+    controls.resize(3 * (n + 3));
     cv::Point2f center(w/2, h/2);
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n + 3; i++)
     {
         float amp = 100;
         float amp2 = 1.4;
-        float angle = (float)i / n * 2 * 3.14;
+        float angle = (float)(i % n) / n * 2 * 3.14;
         cv::Point2f vec(amp * cos(angle), amp * sin(angle));
 //        cv::circle(image, vec + center, 5, cv::Scalar(10, 10,250), 10);
         controls[i] = vec + center;
         vec *= amp2;
-        controls[n + i] = vec + center;
+        controls[n + 3 + i] = vec + center;
         vec *= amp2;
-        controls[2 * n + i] = vec + center;
+        controls[2 * (n + 3) + i] = vec + center;
     }
+
+
     const int q = 4;
     std::vector<float> knots = { 0.f, 0.f, 0.f, 1.f, 1.f, 1.f };
     std::vector<float> knots_y(knots.size());
-    int tn = 100, tn2 = 50;
+    int tn = 400, tn2 = 50;
     for (size_t i = 0; i < knots.size(); i++) {
         knots_y[i] = tn2 * knots[i];
     }
-    knots =
+
+
+
+    n = 17;
+
+
+    int kx_size = n + q;
+//    knots =
+//    {
+//        0.0, 1.0 / k, 2.0 / k, 3.0 / k, 4.0 / k, 5.0 / k,
+//        6.0 / k, 7.0/ k, 8.0 / k, 9.0 / k, 10.0 / k, 11.0 / k,
+//        12.0/k, 13./k, 14./k, 15./k, 16./k, 17./k, 1.
+//    };
+    knots.resize(kx_size + 1);
+    for (int i = 0; i < kx_size + 1; i++)
     {
-        0.0, 1.0 / 18, 2.0 / 18, 3.0 / 18, 4.0 / 18, 5.0 / 18,
-        6.0 / 18, 7.0/ 18, 8.0 / 18, 9.0 / 18, 10.0 / 18, 11.0 / 18,
-        12.0/18, 13./18, 14./18, 15./18, 16./18, 17./18, 1.
-    };
+        knots[i] = (float)i / kx_size;
+    }
     std::vector<float> knots_x(knots.size());
 	for (size_t i = 0; i < knots.size(); i++) {
         knots_x[i] = tn * knots[i];
@@ -203,6 +234,8 @@ int main()
     ud.Ny		= Nfunc_y;
 	ud.controls = controls;
 	ud.window_name = name;
+    ud.knots_x = knots_x;
+    ud.knots_y = knots_y;
 	
     cv::namedWindow("n", cv::WINDOW_FREERATIO);
     cv::imshow("n", Nfunc_y);
