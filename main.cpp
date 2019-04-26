@@ -162,21 +162,21 @@ int main()
 		{0.f,h-1},			{w / 3,h-1},		{2 * w / 3,h-1},		{w-1,h-1}
 	};
 
-    int n = 14, n2 = 3;
-    controls.resize(3 * (n + 3));
+    int n = 17, n2 = 3;
+    controls.resize(3 * n);
     cv::Point2f center(w/2, h/2);
-    for (int i = 0; i < n + 3; i++)
+    for (int i = 0; i < n; i++)
     {
         float amp = 100;
         float amp2 = 1.4;
-        float angle = (float)(i % n) / n * 2 * 3.14;
+        float angle = (float)(i % (n - 3)) / (n - 3) * 2 * 3.14;
         cv::Point2f vec(amp * cos(angle), amp * sin(angle));
 //        cv::circle(image, vec + center, 5, cv::Scalar(10, 10,250), 10);
         controls[i] = vec + center;
         vec *= amp2;
-        controls[n + 3 + i] = vec + center;
+        controls[n + i] = vec + center;
         vec *= amp2;
-        controls[2 * (n + 3) + i] = vec + center;
+        controls[2 * n + i] = vec + center;
     }
 
 
@@ -188,18 +188,7 @@ int main()
         knots_y[i] = tn2 * knots[i];
     }
 
-
-
-    n = 17;
-
-
     int kx_size = n + q;
-//    knots =
-//    {
-//        0.0, 1.0 / k, 2.0 / k, 3.0 / k, 4.0 / k, 5.0 / k,
-//        6.0 / k, 7.0/ k, 8.0 / k, 9.0 / k, 10.0 / k, 11.0 / k,
-//        12.0/k, 13./k, 14./k, 15./k, 16./k, 17./k, 1.
-//    };
     knots.resize(kx_size + 1);
     for (int i = 0; i < kx_size + 1; i++)
     {
