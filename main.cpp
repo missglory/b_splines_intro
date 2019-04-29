@@ -76,6 +76,29 @@ cv::Point2f ComputePoint(const cv::Mat& Nx, const std::vector<cv::Point2f>& cont
     return ret;
 }
 
+float find_u(const cv::Point2f& v1, const cv::Point2f& center)
+{
+    float w = center.x;
+    float h = center.y;
+    float x = v1.x - center.x;
+    float y = v1.y - center.y;
+    if (x < 0)
+        return .5 + std::atan(y / x) / CV_PI / 2;
+    if (y < 0)
+        return 1 + std::atan(y / x) / CV_PI / 2;
+    return (std::atan(y / x)) / CV_PI / 2;
+}
+
+cv::Point2f findP(float u, float v, cv::Point2f p00, cv::Point2f p01, cv::Point2f p10, cv::Point2f p11)
+{
+    cv::Point2f dx = p00 + (p01 - p00) * u;
+    cv::Point2f dx2 = p10 + (p11 - p10) * u;
+    return cv::Point2f(dx + (dx2 - dx) * v);
+}
+
+
+std::vector<std::vector<cv::Vec3b> > colors;
+
 
 void mouse_callback(int event, int x, int y, int flags, void* userdata)
 {
@@ -94,16 +117,23 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 	float h			= image.rows;
 	std::vector<cv::Point2f> &controls = ud->controls;
 	std::string &name = ud->window_name;
+    int tn = 400;
+    int tn2 = 50;
+    int n = 17;
 
 	if (event == cv::EVENT_LBUTTONUP) {
 		activeCP = -1;
 	}
 	if (event == cv::EVENT_LBUTTONDOWN) {
-		for (int i = 0; i < controls.size(); i++) {
-			if (cv::norm(currentP - controls[i]) < 20) {
-				activeCP = i;
-				startP = { (float)x, (float)y };
-			}
+        for (int xx = 0; xx < n - 3; xx++) {
+            for (int yy = 0; yy < 2; yy++)
+            {
+                int i = xx + yy * n;
+                if (cv::norm(currentP - controls[i]) < 20) {
+                    activeCP = i;
+                    startP = { (float)x, (float)y };
+                }
+            }
 		}
 	}
 	if (event == cv::EVENT_MOUSEMOVE && flags == cv::EVENT_FLAG_LBUTTON) {
@@ -111,33 +141,59 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 			controls[activeCP] = currentP;
 			orig.copyTo(image);
 
-            int tn = 400;
-            int tn2 = 50;
-            int n = 17;
-
             int indx = 0;
             int indy = 0;
 
             for (int i = 0; i < tn; i++) {
 				cv::Vec3b *p_im = image.ptr<cv::Vec3b>(i);
-
-                while (indx < knots_x.size() && knots_x[indx] < i)
+                while (indx < (knots_x.size() - 1) && knots_x[indx + 1] < i)
                 {
                     indx++;
                 }
+                float u = (i - knots_x[indx]) / (knots_x[indx+1] - knots_x[indx]);
+
 
                 for (int j = 0; j < tn2; j++) {
                     cv::Point2f new_coord = ComputePoint(Nx, Ny, controls, i, j, w/2, h/2);
-                    cv::circle(image, new_coord, 1, cv::Scalar(10,250,indx * 500.f / (knots_x.size() - 3)), -1);
+//                    cv::Point2f uv_coord = 2 * cv::Point2f(j, i) - new_coord;
+//                    p_im[j] = BilinInterp(orig, uv_coord.x, uv_coord.y);
+
+                    cv::circle(image, new_coord, 1, colors[i][j]/*cv::Scalar(10,250 - u * 250.f, u * 250.f)*/, -1);
+
+
 
 //					cv::Point2f uv_coord = 2 * cv::Point2f(j, i) - new_coord;
 //					p_im[j] = BilinInterp(orig, uv_coord.x, uv_coord.y);
                 }
 			}
 
-            for (auto &pt : controls) {
-                cv::circle(image, pt, 5, cv::Scalar(10, 10, 255), -1);
+            for (int i = 0; i < n - 3; i++) {
+                for (int j = 0; j < 2; j++)
+                {
+                    cv::circle(image, controls[j * n + i], 5, cv::Scalar(10, 10, 255), -1);
+                }
             }
+
+
+//            cv::Point2f center(w/2, h/2);
+//            cv::Point2f temp(x, y);
+//            cv::line(image, center, temp, cv::Scalar(250, 250, 250));
+//            float u = find_u(temp, center);
+//            std::string angl = std::string("u: ") + std::to_string(u);
+//            cv::putText(image, angl, cv::Point2f(100, 100), cv::FONT_HERSHEY_SIMPLEX, .5, cv::Scalar(0, 0, 0));
+
+//            u /= 17./14;
+//            indx = 0;
+//            while (indx < (knots_x.size() - 1) && knots_x[indx + 1] < u * (tn - 1))
+//            {
+//                indx++;
+//            }
+//            float u = (i - knots_x[indx]) / (knots_x[indx+1] - knots_x[indx]);
+
+//            cv::circle(image, controls[indx], 7, cv::Scalar(250, 0, 0), -1);
+
+
+
 
             cv::imshow(name, image);
 		}
@@ -162,8 +218,9 @@ int main()
 		{0.f,h-1},			{w / 3,h-1},		{2 * w / 3,h-1},		{w-1,h-1}
 	};
 
-    int n = 17, n2 = 3;
-    controls.resize(3 * n);
+    int n = 17, n2 = 2;
+    int tn = 400, tn2 = 50;
+    controls.resize(n2 * n);
     cv::Point2f center(w/2, h/2);
     for (int i = 0; i < n; i++)
     {
@@ -171,19 +228,23 @@ int main()
         float amp2 = 1.4;
         float angle = (float)(i % (n - 3)) / (n - 3) * 2 * 3.14;
         cv::Point2f vec(amp * cos(angle), amp * sin(angle));
-//        cv::circle(image, vec + center, 5, cv::Scalar(10, 10,250), 10);
-        controls[i] = vec + center;
-        vec *= amp2;
-        controls[n + i] = vec + center;
-        vec *= amp2;
-        controls[2 * n + i] = vec + center;
+        for (int j = 0; j < n2; j++)
+        {
+            controls[j * n + i] = vec + center;
+            vec *= amp2;
+        }
     }
+
+
+
+
+
 
 
     const int q = 4;
     std::vector<float> knots = { 0.f, 0.f, 0.f, 1.f, 1.f, 1.f };
     std::vector<float> knots_y(knots.size());
-    int tn = 400, tn2 = 50;
+
     for (size_t i = 0; i < knots.size(); i++) {
         knots_y[i] = tn2 * knots[i];
     }
@@ -205,15 +266,47 @@ int main()
             Nfunc_x.at<float>(i, t) = N(knots_x, t, i, q);
 		}
 	}
-    for (int i = 0; i < n2; i++) {
-        for (int t = 0; t < tn2; t++) {
-            Nfunc_y.at<float>(i, t) = N(knots_y, t, i, 3);
-        }
+//    for (int i = 0; i < n2; i++) {
+//        for (int t = 0; t < tn2; t++) {
+//            Nfunc_y.at<float>(i, t) = N(knots_y, t, i, 3);
+//        }
+//    }
+    for (int t = 0; t < tn2; t++)
+    {
+        Nfunc_y.at<float>(1, t) = (float)t / (tn2 - 1);
+        Nfunc_y.at<float>(0, t) = 1 - (float)t / (tn2 - 1);
     }
 
 	for (auto &pt : controls) {
 		cv::circle(image, pt, 5, cv::Scalar(10, 10, 250), -1);
 	}
+
+    colors.resize(tn, std::vector<cv::Vec3b>(tn2, {0,0,0}));
+
+    int indx = 0;
+
+    for (int i = 0; i < tn; i++)
+    {
+        while (indx < (knots_x.size() - 1) && knots_x[indx + 1] < i)
+        {
+            indx++;
+        }
+        float u = (i - knots_x[indx]) / (knots_x[indx+1] - knots_x[indx]);
+
+        for (int j = 0; j < tn2; j++) {
+//            cv::Point2f new_coord = ComputePoint(Nfunc_x, Nfunc_y, controls, i, j, w/2, h/2);
+            cv::Point2f uv = findP(u, (float)j/(tn2-1), controls[indx], controls[indx+1], controls[indx+n], controls[indx+n+1]);
+
+            colors[i][j] = orig.at<cv::Vec3b>(uv.y, uv.x);
+
+//                    cv::circle(image, new_coord, 1, cv::Scalar(10,250 - u * 250.f, u * 250.f), -1);
+
+//					cv::Point2f uv_coord = 2 * cv::Point2f(j, i) - new_coord;
+//					p_im[j] = BilinInterp(orig, uv_coord.x, uv_coord.y);
+        }
+    }
+
+
 
 	std::string name = "Display Image";
 	UserData ud;
@@ -232,7 +325,7 @@ int main()
     cv::imshow("nx", Nfunc_x);
 
 	cv::namedWindow(name);
-	cv::setMouseCallback(name, mouse_callback, &ud);
+    cv::setMouseCallback(name, mouse_callback, &ud);
 	cv::imshow(name, image);
 	cv::waitKey();
 
