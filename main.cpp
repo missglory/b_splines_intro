@@ -12,6 +12,8 @@ struct UserData
 	std::vector<cv::Point2f> controls;
 	std::string window_name;
     std::vector<float> knots_x, knots_y;
+    int tn, tn2, n;
+    cv::Mat colors;
 };
 
 float N(const std::vector<float> &knot, float t, int k, int q)
@@ -97,7 +99,7 @@ cv::Point2f findP(float u, float v, cv::Point2f p00, cv::Point2f p01, cv::Point2
 }
 
 
-std::vector<std::vector<cv::Vec3b> > colors;
+
 
 
 void mouse_callback(int event, int x, int y, int flags, void* userdata)
@@ -111,15 +113,16 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 	cv::Mat& orig	= ud->orig;
 	cv::Mat& Nx		= ud->Nx;
 	cv::Mat& Ny		= ud->Ny;
+    cv::Mat& colors = ud->colors;
     std::vector<float>& knots_x = ud->knots_x;
     std::vector<float>& knots_y = ud->knots_y;
 	float w			= image.cols;
 	float h			= image.rows;
 	std::vector<cv::Point2f> &controls = ud->controls;
 	std::string &name = ud->window_name;
-    int tn = 400;
-    int tn2 = 50;
-    int n = 17;
+    int tn = ud->tn;
+    int tn2 = ud->tn2;
+    int n = ud->n;
 
 	if (event == cv::EVENT_LBUTTONUP) {
 		activeCP = -1;
@@ -129,7 +132,7 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
             for (int yy = 0; yy < 2; yy++)
             {
                 int i = xx + yy * n;
-                if (cv::norm(currentP - controls[i]) < 20) {
+                if (cv::norm(currentP - controls[i]) < 10) {
                     activeCP = i;
                     startP = { (float)x, (float)y };
                 }
@@ -158,9 +161,9 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 //                    cv::Point2f uv_coord = 2 * cv::Point2f(j, i) - new_coord;
 //                    p_im[j] = BilinInterp(orig, uv_coord.x, uv_coord.y);
 
-                    cv::circle(image, new_coord, 1, colors[i][j]/*cv::Scalar(10,250 - u * 250.f, u * 250.f)*/, -1);
-
-
+//                    cv::circle(image, new_coord, 1, colors[i][j]/*cv::Scalar(10,250 - u * 250.f, u * 250.f)*/, -1);
+//                    image.at<cv::Vec3b>(new_coord.y, new_coord.x) = colors.at<cv::Vec3b>(j,i);
+                    image.at<cv::Vec3b>(new_coord.y, new_coord.x) = BilinInterp(colors, i, j);
 
 //					cv::Point2f uv_coord = 2 * cv::Point2f(j, i) - new_coord;
 //					p_im[j] = BilinInterp(orig, uv_coord.x, uv_coord.y);
@@ -170,7 +173,7 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
             for (int i = 0; i < n - 3; i++) {
                 for (int j = 0; j < 2; j++)
                 {
-                    cv::circle(image, controls[j * n + i], 5, cv::Scalar(10, 10, 255), -1);
+                    cv::circle(image, controls[j * n + i], 2, cv::Scalar(10, 10, 255), -1);
                 }
             }
 
@@ -218,8 +221,8 @@ int main()
 		{0.f,h-1},			{w / 3,h-1},		{2 * w / 3,h-1},		{w-1,h-1}
 	};
 
-    int n = 17, n2 = 2;
-    int tn = 400, tn2 = 50;
+    int n = 50, n2 = 2;
+    int tn = 1000, tn2 = 200;
     controls.resize(n2 * n);
     cv::Point2f center(w/2, h/2);
     for (int i = 0; i < n; i++)
@@ -234,9 +237,6 @@ int main()
             vec *= amp2;
         }
     }
-
-
-
 
 
 
@@ -281,7 +281,8 @@ int main()
 		cv::circle(image, pt, 5, cv::Scalar(10, 10, 250), -1);
 	}
 
-    colors.resize(tn, std::vector<cv::Vec3b>(tn2, {0,0,0}));
+//    colors.resize(tn, std::vector<cv::Vec3b>(tn2, {0,0,0}));
+    cv::Mat colors = cv::Mat::zeros(tn2, tn, CV_8UC3);
 
     int indx = 0;
 
@@ -295,14 +296,13 @@ int main()
 
         for (int j = 0; j < tn2; j++) {
 //            cv::Point2f new_coord = ComputePoint(Nfunc_x, Nfunc_y, controls, i, j, w/2, h/2);
-            cv::Point2f uv = findP(u, (float)j/(tn2-1), controls[indx], controls[indx+1], controls[indx+n], controls[indx+n+1]);
-
-            colors[i][j] = orig.at<cv::Vec3b>(uv.y, uv.x);
+            cv::Point2f uv = findP(u, (float)j/(tn2), controls[(indx+n-5)%(n-3)], controls[(indx+n-4)%(n-3)], controls[(indx+n-5)%(n-3)+n], controls[(indx+n-4)%(n-3)+n]);
+//            colors.at<cv::Vec3b>(j,i) = orig.at<cv::Vec3b>(uv.y, uv.x);
+            colors.at<cv::Vec3b>(j,i) = BilinInterp(orig, uv.x, uv.y);
+//            colors[i][j] = orig.at<cv::Vec3b>(uv.y, uv.x);
 
 //                    cv::circle(image, new_coord, 1, cv::Scalar(10,250 - u * 250.f, u * 250.f), -1);
 
-//					cv::Point2f uv_coord = 2 * cv::Point2f(j, i) - new_coord;
-//					p_im[j] = BilinInterp(orig, uv_coord.x, uv_coord.y);
         }
     }
 
@@ -318,11 +318,18 @@ int main()
 	ud.window_name = name;
     ud.knots_x = knots_x;
     ud.knots_y = knots_y;
-	
-    cv::namedWindow("n", cv::WINDOW_FREERATIO);
-    cv::imshow("n", Nfunc_y);
-    cv::namedWindow("nx", cv::WINDOW_FREERATIO);
-    cv::imshow("nx", Nfunc_x);
+    ud.tn = tn;
+    ud.tn2 = tn2;
+    ud.colors =  colors;
+    ud.n = n;
+
+
+    cv::namedWindow("colors");
+    cv::imshow("colors", colors);
+//    cv::namedWindow("n", cv::WINDOW_FREERATIO);
+//    cv::imshow("n", Nfunc_y);
+//    cv::namedWindow("nx", cv::WINDOW_FREERATIO);
+//    cv::imshow("nx", Nfunc_x);
 
 	cv::namedWindow(name);
     cv::setMouseCallback(name, mouse_callback, &ud);
