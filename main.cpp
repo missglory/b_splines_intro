@@ -18,7 +18,8 @@ struct UserData
 
 float func_y(float y)
 {
-    return std::sqrt(y);
+//    return std::sqrt(y);
+    return y;
 }
 
 
@@ -106,7 +107,9 @@ cv::Point2f findP(float u, float v, cv::Point2f p00, cv::Point2f p01, cv::Point2
 
 
 
-
+const cv::Point2f originalPivot(100, 100);
+cv::Point2f pivot = originalPivot;
+const int pivotId = 21486234;
 
 void mouse_callback(int event, int x, int y, int flags, void* userdata)
 {
@@ -133,7 +136,14 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 	if (event == cv::EVENT_LBUTTONUP) {
 		activeCP = -1;
 	}
-	if (event == cv::EVENT_LBUTTONDOWN) {
+    if (event == cv::EVENT_LBUTTONDOWN)
+    {
+        if (cv::norm(currentP - pivot) < 10)
+        {
+            activeCP = pivotId;
+            startP = {(float)x,(float)y};
+        }
+
         for (int xx = 0; xx < n - 3; xx++) {
             for (int yy = 0; yy < 2; yy++)
             {
@@ -146,8 +156,25 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 		}
 	}
 	if (event == cv::EVENT_MOUSEMOVE && flags == cv::EVENT_FLAG_LBUTTON) {
-        if (activeCP >= -1) {
-			controls[activeCP] = currentP;
+        if (activeCP >= -1)
+        {
+            if (activeCP == pivotId)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    controls[i] -= pivot - originalPivot;
+                }
+                pivot = currentP;
+                for (int i = 0; i < n; i++)
+                {
+                    controls[i] += pivot - originalPivot;
+                }
+            }
+            else
+            {
+                controls[activeCP] = currentP;
+            }
+
 			orig.copyTo(image);
 
             int indx = 0;
@@ -183,7 +210,7 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
                 }
             }
 
-
+            cv::circle(image, pivot, 5, cv::Scalar(10, 250, 0), 10);
 //            cv::Point2f center(w/2, h/2);
 //            cv::Point2f temp(x, y);
 //            cv::line(image, center, temp, cv::Scalar(250, 250, 250));
