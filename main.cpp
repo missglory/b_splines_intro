@@ -16,6 +16,12 @@ struct UserData
     cv::Mat colors;
 };
 
+float func_y(float y)
+{
+    return std::sqrt(y);
+}
+
+
 float N(const std::vector<float> &knot, float t, int k, int q)
 {
 	if (q == 1) return (t >= knot[k] && t < knot[k + 1]) ? 1.f : 0.f;
@@ -95,7 +101,7 @@ cv::Point2f findP(float u, float v, cv::Point2f p00, cv::Point2f p01, cv::Point2
 {
     cv::Point2f dx = p00 + (p01 - p00) * u;
     cv::Point2f dx2 = p10 + (p11 - p10) * u;
-    return cv::Point2f(dx + (dx2 - dx) * v);
+    return cv::Point2f(dx + (dx2 - dx) * func_y(v));
 }
 
 
@@ -132,7 +138,7 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
             for (int yy = 0; yy < 2; yy++)
             {
                 int i = xx + yy * n;
-                if (cv::norm(currentP - controls[i]) < 10) {
+                if (cv::norm(currentP - controls[i]) < 3) {
                     activeCP = i;
                     startP = { (float)x, (float)y };
                 }
@@ -273,12 +279,12 @@ int main()
 //    }
     for (int t = 0; t < tn2; t++)
     {
-        Nfunc_y.at<float>(1, t) = (float)t / (tn2 - 1);
-        Nfunc_y.at<float>(0, t) = 1 - (float)t / (tn2 - 1);
+        Nfunc_y.at<float>(1, t) = func_y((float)t / (tn2 - 1));
+        Nfunc_y.at<float>(0, t) = 1 - Nfunc_y.at<float>(1, t);
     }
 
 	for (auto &pt : controls) {
-		cv::circle(image, pt, 5, cv::Scalar(10, 10, 250), -1);
+        cv::circle(image, pt, 2, cv::Scalar(10, 10, 250), -1);
 	}
 
 //    colors.resize(tn, std::vector<cv::Vec3b>(tn2, {0,0,0}));
@@ -324,8 +330,8 @@ int main()
     ud.n = n;
 
 
-    cv::namedWindow("colors");
-    cv::imshow("colors", colors);
+//    cv::namedWindow("colors");
+//    cv::imshow("colors", colors);
 //    cv::namedWindow("n", cv::WINDOW_FREERATIO);
 //    cv::imshow("n", Nfunc_y);
 //    cv::namedWindow("nx", cv::WINDOW_FREERATIO);
