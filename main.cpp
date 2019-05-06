@@ -12,7 +12,7 @@ struct UserData
 	std::vector<cv::Point2f> controls;
 	std::string window_name;
     std::vector<float> knots_x, knots_y;
-    int tn, tn2, n;
+    int quantizeCount_u, quantizeCount_v, n_u;
 };
 
 
@@ -84,7 +84,7 @@ cv::Point2f ComputePoint(const cv::Mat& Nx, const std::vector<cv::Point2f>& cont
 }
 
 
-cv::Mat _rendertestimage(cv::Mat& testimage)
+cv::Mat _rendertestmask(cv::Mat& testimage)
 {
     cv::Mat rendertestimage = cv::Mat::zeros(testimage.cols, testimage.rows, CV_32FC3);
     int from_to[] = { 0,0, 1,1, 2,2 };
@@ -100,7 +100,7 @@ typedef struct{
 } pointsTransform;
 
 
-cv::Mat find_uv_coords(int n, std::vector<cv::Point2f>& controls, int w, int h)
+cv::Mat find_uv_coords(int n, std::vector<cv::Point2f>& controls, int w, int h, std::vector<float>& knots_x, int tn)
 {
     cv::Mat indmask = cv::Mat::zeros(w, h, CV_8U);
     cv::Mat uv_mask = cv::Mat::zeros(w, h, CV_32FC2);
@@ -157,12 +157,13 @@ cv::Mat find_uv_coords(int n, std::vector<cv::Point2f>& controls, int w, int h)
         cv::perspectiveTransform(pT[i].points, pT[i].quantize_params, pT[i].transform);
         for (int j = 0; j < pT[i].points.size(); j++)
         {
-            float u = (pT[i].quantize_params[j].x + (i - 1)) / (n - 2);
+            float u = (knots_x[i+2] + (knots_x[i+3] - knots_x[i+2]) * pT[i].quantize_params[j].x) / tn;
             float v = pT[i].quantize_params[j].y;
             v = std::min(1.f, std::max(0.f, v));
-            uv_mask.at<cv::Vec2f>(pT[i].points[j]) = cv::Vec2f(u, pT[i].quantize_params[j].y);
+            uv_mask.at<cv::Vec2f>(pT[i].points[j]) = cv::Vec2f(u, v);
         }
     }
+    cv::normalize(uv_mask, uv_mask, 0, 1, cv::NORM_MINMAX);
     return uv_mask;
 }
 
@@ -183,11 +184,11 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 	float h			= image.rows;
 	std::vector<cv::Point2f> &controls = ud->controls;
 	std::string &name = ud->window_name;
-    int tn = ud->tn;
-    int tn2 = ud->tn2;
-    int n = ud->n;
+    int normalization_u = ud->quantizeCount_u;
+    int normalization_v = ud->quantizeCount_v;
+    int n_u = ud->n_u;
 
-    cv::Mat testmask = cv::Mat::zeros(w, h, CV_32FC2);
+    static cv::Mat testmask;
     cv::Mat rendertestmask = cv::Mat::zeros(w, h, CV_32FC3);
 
     static const cv::Point2f originalPivot(100, 100);
@@ -205,10 +206,10 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
             startP = {(float)x,(float)y};
         }
 
-        for (int xx = 0; xx < n - 3; xx++) {
+        for (int xx = 0; xx < n_u - 3; xx++) {
             for (int yy = 0; yy < 2; yy++)
             {
-                int i = xx + yy * n;
+                int i = xx + yy * n_u;
                 if (cv::norm(currentP - controls[i]) < 3) {
                     activeCP = i;
                     startP = { (float)x, (float)y };
@@ -216,17 +217,19 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
             }
 		}
 	}
+
 	if (event == cv::EVENT_MOUSEMOVE && flags == cv::EVENT_FLAG_LBUTTON) {
+
         if (activeCP >= -1)
         {
             if (activeCP == pivotId)
             {
-                for (int i = 0; i < n; i++)
+                for (int i = 0; i < n_u; i++)
                 {
                     controls[i] -= pivot - originalPivot;
                 }
                 pivot = currentP;
-                for (int i = 0; i < n; i++)
+                for (int i = 0; i < n_u; i++)
                 {
                     controls[i] += pivot - originalPivot;
                 }
@@ -238,31 +241,36 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 
 			orig.copyTo(image);
 
-            testmask = find_uv_coords(n, controls, w, h);
+            testmask = find_uv_coords(n_u, controls, w, h, knots_x, normalization_u);
+
+            std::cout << testmask.at<cv::Vec2f>(x,y) << std::endl;
+
 
             for(int i = 0; i < h; i++)
             {
                 for(int j = 0; j < w; j++)
                 {
-
                     cv::Point2f curPoint(j, i);
                     cv::Vec2f u_v = testmask.at<cv::Vec2f>(curPoint);
-                    if (!u_v[0] || !u_v[1])
+                    if (!u_v[0] && !u_v[1])
                         continue;
-                    u_v[0] = std::min(1.f, u_v[0]) * tn;
-                    u_v[1] = std::min(1.f, u_v[1]) * tn2;
+                    u_v[0] = std::min(1.f, u_v[0]) * normalization_u;
+                    u_v[1] = std::min(1.f, u_v[1]) * normalization_v;
                     cv::Point2f new_coord = ComputePoint(Nx, Ny, controls, u_v);
+                    cv::Point2f uv_coord = curPoint * 2 - new_coord;
+//                    image.at<cv::Vec3b>(curPoint) = BilinInterp(orig, uv_coord.x, uv_coord.y);
                     image.at<cv::Vec3b>(curPoint) = BilinInterp(orig, new_coord.x, new_coord.y);
                 }
             }
 
-            rendertestmask = _rendertestimage(testmask);
+            rendertestmask = _rendertestmask(testmask);
             imshow("testmask", rendertestmask);
 
-            for (int i = 0; i < n - 3; i++) {
+            for (int i = 0; i < n_u - 3; i++) {
                 for (int j = 0; j < 2; j++)
                 {
-                    cv::circle(image, controls[j * n + i], 2, cv::Scalar(10, 10, 255), -1);
+                    cv::circle(image, controls[j * n_u + i], 2, cv::Scalar(10, 10, 255, 120), -1);
+//                    image.at<cv::Vec3b>(controls[j * n_u + i]) = cv::Vec3b(10, 10, 255);
                 }
             }
             cv::circle(image, pivot, 5, cv::Scalar(10, 250, 0), 10);
@@ -289,19 +297,19 @@ int main()
 		{0.f,h-1},			{w / 3,h-1},		{2 * w / 3,h-1},		{w-1,h-1}
 	};
 
-    int n = 50, n2 = 2;
-    int tn = 1000, tn2 = 200;
-    controls.resize(n2 * n);
+    int n_u = 50, n_v = 2;
+    int quantizeCount_u = 5000, quantizeCount_v = 1000;
+    controls.resize(n_v * n_u);
     cv::Point2f center(w/2, h/2);
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n_u; i++)
     {
-        float amp = 140;
-        float amp2 = 1.4;
-        float angle = (float)(i % (n - 3)) / (n - 3) * 2 * 3.14;
+        float amp = 120;
+        float amp2 = 1.8;
+        float angle = (float)(i % (n_u - 3)) / (n_u - 3) * 2 * 3.14;
         cv::Point2f vec(amp * cos(angle), amp * sin(angle));
-        for (int j = 0; j < n2; j++)
+        for (int j = 0; j < n_v; j++)
         {
-            controls[j * n + i] = vec + center;
+            controls[j * n_u + i] = vec + center;
             vec *= amp2;
         }
     }
@@ -312,10 +320,10 @@ int main()
     std::vector<float> knots_y(knots.size());
 
     for (size_t i = 0; i < knots.size(); i++) {
-        knots_y[i] = tn2 * knots[i];
+        knots_y[i] = quantizeCount_v * knots[i];
     }
 
-    int kx_size = n + q;
+    int kx_size = n_u + q;
     knots.resize(kx_size + 1);
     for (int i = 0; i < kx_size + 1; i++)
     {
@@ -323,12 +331,12 @@ int main()
     }
     std::vector<float> knots_x(knots.size());
 	for (size_t i = 0; i < knots.size(); i++) {
-        knots_x[i] = tn * knots[i];
+        knots_x[i] = quantizeCount_u * knots[i];
 	}
 
-    cv::Mat Nfunc_x(n, tn, CV_32FC1), Nfunc_y(n2, tn2, CV_32FC1);
-    for (int i = 0; i < n; i++) {
-        for (int t = 0; t < tn; t++) {
+    cv::Mat Nfunc_x(n_u, quantizeCount_u, CV_32FC1), Nfunc_y(n_v, quantizeCount_v, CV_32FC1);
+    for (int i = 0; i < n_u; i++) {
+        for (int t = 0; t < quantizeCount_u; t++) {
             Nfunc_x.at<float>(i, t) = N(knots_x, t, i, q);
 		}
 	}
@@ -337,9 +345,9 @@ int main()
 //            Nfunc_y.at<float>(i, t) = N(knots_y, t, i, 3);
 //        }
 //    }
-    for (int t = 0; t < tn2; t++)
+    for (int t = 0; t < quantizeCount_v; t++)
     {
-        Nfunc_y.at<float>(1, t) = (float)t / (tn2 - 1);
+        Nfunc_y.at<float>(1, t) = (float)t / (quantizeCount_v - 1);
         Nfunc_y.at<float>(0, t) = 1 - Nfunc_y.at<float>(1, t);
     }
 
@@ -358,9 +366,9 @@ int main()
 	ud.window_name = name;
     ud.knots_x = knots_x;
     ud.knots_y = knots_y;
-    ud.tn = tn;
-    ud.tn2 = tn2;
-    ud.n = n;
+    ud.quantizeCount_u = quantizeCount_u;
+    ud.quantizeCount_v = quantizeCount_v;
+    ud.n_u = n_u;
 
 //    cv::namedWindow("n", cv::WINDOW_FREERATIO);
 //    cv::imshow("n", Nfunc_y);
