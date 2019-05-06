@@ -13,14 +13,7 @@ struct UserData
 	std::string window_name;
     std::vector<float> knots_x, knots_y;
     int tn, tn2, n;
-    cv::Mat colors;
 };
-
-float func_y(float y)
-{
-//    return std::sqrt(y);
-    return y;
-}
 
 
 float N(const std::vector<float> &knot, float t, int k, int q)
@@ -90,27 +83,6 @@ cv::Point2f ComputePoint(const cv::Mat& Nx, const std::vector<cv::Point2f>& cont
     return ret;
 }
 
-float find_u(const cv::Point2f& v1, const cv::Point2f& center)
-{
-    float w = center.x;
-    float h = center.y;
-    float x = v1.x - center.x;
-    float y = v1.y - center.y;
-    if (x < 0)
-        return .5 + std::atan(y / x) / CV_PI / 2;
-    if (y < 0)
-        return 1 + std::atan(y / x) / CV_PI / 2;
-    return (std::atan(y / x)) / CV_PI / 2;
-}
-
-cv::Point2f findP(float u, float v, cv::Point2f p00, cv::Point2f p01, cv::Point2f p10, cv::Point2f p11)
-{
-    cv::Point2f dx = p00 + (p01 - p00) * u;
-    cv::Point2f dx2 = p10 + (p11 - p10) * u;
-    return cv::Point2f(dx + (dx2 - dx) * func_y(v));
-}
-
-
 
 cv::Mat _rendertestimage(cv::Mat& testimage)
 {
@@ -121,8 +93,78 @@ cv::Mat _rendertestimage(cv::Mat& testimage)
 }
 
 
+typedef struct{
+    std::vector<cv::Point2f> points;
+    cv::Mat transform;
+    std::vector<cv::Point2f> quantize_params;
+} pointsTransform;
 
 
+cv::Mat find_uv_coords(int n, std::vector<cv::Point2f>& controls, int w, int h)
+{
+    cv::Mat indmask = cv::Mat::zeros(w, h, CV_8U);
+    cv::Mat uv_mask = cv::Mat::zeros(w, h, CV_32FC2);
+    pointsTransform pT[n - 2];
+
+    int ind = 1;
+    cv::Point2f uv_coords[4];
+    uv_coords[0] = {0,0};
+    uv_coords[1] = {0,1};
+    uv_coords[2] = {1,1};
+    uv_coords[3] = {1,0};
+
+
+    // 1. FIND PERSPECTIVE TRANSFORM MATRIX FOR EACH REGION
+
+    for(int i = 1; i < n - 2; i++)
+    {
+        cv::Point2f xy_coords[4];
+        cv::Point xy_coords_int[4];
+
+        xy_coords[0] = controls[i];
+        xy_coords[1] = controls[i+n];
+        xy_coords[2] = controls[i+n+1];
+        xy_coords[3] = controls[i+1];
+        for(int i = 0; i < 4; i++)
+        {
+            xy_coords_int[i] = xy_coords[i];
+        }
+
+        cv::fillConvexPoly(indmask, xy_coords_int, 4, cv::Scalar(ind++));
+        pT[i].transform = cv::getPerspectiveTransform(xy_coords, uv_coords);
+
+    }
+
+    // 2. FIND ALL POINTS TO TRANSFORM
+
+    for (int i = 0; i < h; i++)
+    {
+        for (int j = 0; j < w; j++)
+        {
+            cv::Point2f cur_p(j,i);
+            int ind = indmask.at<unsigned char>(cur_p);
+            if (!ind)
+                continue;
+            pT[ind].points.push_back(cv::Point2f(cur_p));
+        }
+    }
+
+    // 3. TRANSFORM POINTS
+
+    for(int i = 1; i < n - 2; i++)
+    {
+        pT[i].quantize_params.resize(pT[i].points.size());
+        cv::perspectiveTransform(pT[i].points, pT[i].quantize_params, pT[i].transform);
+        for (int j = 0; j < pT[i].points.size(); j++)
+        {
+            float u = (pT[i].quantize_params[j].x + (i - 1)) / (n - 2);
+            float v = pT[i].quantize_params[j].y;
+            v = std::min(1.f, std::max(0.f, v));
+            uv_mask.at<cv::Vec2f>(pT[i].points[j]) = cv::Vec2f(u, pT[i].quantize_params[j].y);
+        }
+    }
+    return uv_mask;
+}
 
 void mouse_callback(int event, int x, int y, int flags, void* userdata)
 {
@@ -135,7 +177,6 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 	cv::Mat& orig	= ud->orig;
 	cv::Mat& Nx		= ud->Nx;
 	cv::Mat& Ny		= ud->Ny;
-    cv::Mat& colors = ud->colors;
     std::vector<float>& knots_x = ud->knots_x;
     std::vector<float>& knots_y = ud->knots_y;
 	float w			= image.cols;
@@ -146,7 +187,6 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
     int tn2 = ud->tn2;
     int n = ud->n;
 
-    cv::Mat indmask = cv::Mat::zeros(w, h, CV_8U);
     cv::Mat testmask = cv::Mat::zeros(w, h, CV_32FC2);
     cv::Mat rendertestmask = cv::Mat::zeros(w, h, CV_32FC3);
 
@@ -198,83 +238,19 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 
 			orig.copyTo(image);
 
-
-
-            int ind = 1;
-            cv::Point2f uv_coords[4];
-            uv_coords[0] = {0,0};
-            uv_coords[1] = {0,1};
-            uv_coords[2] = {1,1};
-            uv_coords[3] = {1,0};
-
-            typedef struct{
-                std::vector<cv::Point2f> points;
-                cv::Mat transform;
-                std::vector<cv::Point2f> quantize_params;
-            } pointsTransform;
-            pointsTransform pT[n - 2];
-            for(int i = 1; i < n - 2; i++)
-            {
-                cv::Point2f xy_coords[4];
-                cv::Point xy_coords_int[4];
-
-                xy_coords[0] = controls[i];
-                xy_coords[1] = controls[i+n];
-                xy_coords[2] = controls[i+n+1];
-                xy_coords[3] = controls[i+1];
-                for(int i = 0; i < 4; i++)
-                {
-                    xy_coords_int[i] = xy_coords[i];
-                }
-
-                cv::fillConvexPoly(indmask, xy_coords_int, 4, cv::Scalar(ind++));
-                pT[i].transform = cv::getPerspectiveTransform(xy_coords, uv_coords);
-
-            }
-            imshow("mask", indmask);
-            for (int i = 0; i < h; i++)
-            {
-                for (int j = 0; j < w; j++)
-                {
-                    cv::Point2f cur_p(j,i);
-                    int ind = indmask.at<unsigned char>(cur_p);
-                    if (!ind)
-                        continue;
-                    pT[ind].points.push_back(cv::Point2f(cur_p));
-                }
-            }
-            for(int i = 1; i < n - 2; i++)
-            {
-                pT[i].quantize_params.resize(pT[i].points.size());
-                cv::perspectiveTransform(pT[i].points, pT[i].quantize_params, pT[i].transform);
-                for (int j = 0; j < pT[i].points.size(); j++)
-                {
-                    float u = (pT[i].quantize_params[j].x + (i - 1)) / (n - 2);
-                    float v = pT[i].quantize_params[j].y;
-                    v = std::min(1.f, std::max(0.f, v));
-                    testmask.at<cv::Vec2f>(pT[i].points[j]) = cv::Vec2f(u, pT[i].quantize_params[j].y);
-//                    rendertestmask.at<cv::Vec3f>(pT[i].points[j]) = cv::Vec3f(u / 3, 0.f, v / 3);
-                }
-            }
+            testmask = find_uv_coords(n, controls, w, h);
 
             for(int i = 0; i < h; i++)
             {
                 for(int j = 0; j < w; j++)
                 {
 
-                    cv::Point2f cur_p(j,i);
-                    int ind = indmask.at<unsigned char>(cur_p);
-                    if (!ind)
-                        continue;
-
                     cv::Point2f curPoint(j, i);
                     cv::Vec2f u_v = testmask.at<cv::Vec2f>(curPoint);
-                    u_v[0] = std::max(0.f, u_v[0]);
-                    u_v[0] = std::min(1.f, u_v[0]);
-                    u_v[1] = std::max(0.f, u_v[1]);
-                    u_v[1] = std::min(1.f, u_v[1]);
-                    u_v[0] *= tn;
-                    u_v[1] *= tn2;
+                    if (!u_v[0] || !u_v[1])
+                        continue;
+                    u_v[0] = std::min(1.f, u_v[0]) * tn;
+                    u_v[1] = std::min(1.f, u_v[1]) * tn2;
                     cv::Point2f new_coord = ComputePoint(Nx, Ny, controls, u_v);
                     image.at<cv::Vec3b>(curPoint) = BilinInterp(orig, new_coord.x, new_coord.y);
                 }
@@ -363,7 +339,7 @@ int main()
 //    }
     for (int t = 0; t < tn2; t++)
     {
-        Nfunc_y.at<float>(1, t) = func_y((float)t / (tn2 - 1));
+        Nfunc_y.at<float>(1, t) = (float)t / (tn2 - 1);
         Nfunc_y.at<float>(0, t) = 1 - Nfunc_y.at<float>(1, t);
     }
 
