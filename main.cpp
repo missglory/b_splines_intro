@@ -103,8 +103,16 @@ typedef struct{
 } pointsTransform;
 
 
-cv::Mat find_uv_coords(int n, std::vector<cv::Point2f>& controls, int w, int h, std::vector<float>& knots_x, int tn)
+cv::Mat find_uv_coords(UserData* ud)
 {
+    int n = ud->n_u;
+    std::vector<cv::Point2f>& controls = ud->controls;
+    int w = ud->orig.cols;
+    int h = ud->orig.rows;
+    std::vector<float>& knots_x = ud->knots_x;
+    int tn = ud->quantizeCount_u;
+    int n_v = ud->n_v;
+
     cv::Mat indmask = cv::Mat::zeros(w, h, CV_8U);
     cv::Mat uv_mask = cv::Mat::zeros(w, h, CV_32FC2);
     pointsTransform pT[n - 2];
@@ -125,8 +133,8 @@ cv::Mat find_uv_coords(int n, std::vector<cv::Point2f>& controls, int w, int h, 
         cv::Point xy_coords_int[4];
 
         xy_coords[0] = controls[i];
-        xy_coords[1] = controls[i + 3*n];
-        xy_coords[2] = controls[i + 3*n + 1];
+        xy_coords[1] = controls[i + (n_v-1)*n];
+        xy_coords[2] = controls[i + (n_v-1)*n + 1];
         xy_coords[3] = controls[i + 1];
         for(int i = 0; i < 4; i++)
         {
@@ -252,7 +260,7 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
             orig.copyTo(image);
 //            image = cv::Mat::zeros(image.cols, image.rows, CV_8UC3);
 
-            testmask = find_uv_coords(n_u, controls, w, h, knots_x, normalization_u);
+            testmask = find_uv_coords(ud);
 
             std::cout << testmask.at<cv::Vec2f>(y,x) << std::endl;
 
