@@ -115,7 +115,7 @@ cv::Mat find_uv_coords(UserData* ud)
 
     cv::Mat indmask = cv::Mat::zeros(w, h, CV_8U);
     cv::Mat uv_mask = cv::Mat::zeros(w, h, CV_32FC2);
-    pointsTransform pT[n - 2];
+    std::vector<pointsTransform> pT(n-2);
 
     int ind = 1;
     cv::Point2f uv_coords[4];
