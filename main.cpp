@@ -12,7 +12,7 @@ struct UserData
 	std::vector<cv::Point2f> controls;
 	std::string window_name;
     std::vector<float> knots_x, knots_y;
-    int quantizeCount_u, quantizeCount_v, n_u, n_v;
+    int quantize_u, quantize_v, n_u, n_v;
 };
 
 
@@ -23,7 +23,7 @@ float N(const std::vector<float> &knot, float t, int k, int q)
 	float div1 = knot[k + q - 1] - knot[k];
 	float div2 = knot[k + q] - knot[k + 1];
 	float val1 = (div1 != 0) ? (t - knot[k]) * N(knot, t, k, q - 1) / div1 : 0;
-	float val2 = (div2 != 0) ? (knot[k + q] - t) * N(knot, t, k + 1, q - 1) / div2 : 0; 
+	float val2 = (div2 != 0) ? (knot[k + q] - t) * N(knot, t, k + 1, q - 1) / div2 : 0;
 	
 	return val1 + val2;
 }
@@ -50,16 +50,7 @@ cv::Vec3b BilinInterp(const cv::Mat &src, float x, float y)
 cv::Point2f ComputePoint(const cv::Mat& Nx, const cv::Mat& Ny, const std::vector<cv::Point2f>& controls, int x, int y)
 {
     cv::Point2f ret;
-    float norm = 0;
-    for (int i = 0; i < Nx.rows; i++)
-    {
-        norm += Nx.at<float>(i, x);
-    }
-//    ret += (1.f - norm) * cv::Point2f(startx, starty);
-    if (norm < 0.9999)
-    {
-        return {0.f, 0.f};
-    }
+
     for (int i = 0; i < Nx.rows; i++) {
 		for (int j = 0; j < Ny.rows; j++) {
             cv::Point2f control = controls[Nx.rows * j + i];
@@ -76,25 +67,13 @@ cv::Point2f ComputePoint(const cv::Mat& Nx, const cv::Mat& Ny, const std::vector
     return ComputePoint(Nx, Ny, controls, point.x, point.y);
 }
 
-cv::Point2f ComputePoint(const cv::Mat& Nx, const std::vector<cv::Point2f>& controls, int x, int tn = 0)
-{
-    if (!tn) tn = Nx.rows;
-    cv::Point2f ret;
-    for (int i = 0; i < tn; i++) {
-        ret += Nx.at<float>(i, x) * controls[i];
-    }
-    return ret;
-}
-
-
 cv::Mat _rendertestmask(cv::Mat& testimage)
 {
     cv::Mat rendertestimage = cv::Mat::zeros(testimage.cols, testimage.rows, CV_32FC3);
-    int from_to[] = { 0,0, 1,1, 2,2 };
+    int from_to[] = { 0,0, 1,1, -1,2 };
     cv::mixChannels({{testimage}}, {{rendertestimage}}, from_to, testimage.channels());
     return rendertestimage;
 }
-
 
 typedef struct{
     std::vector<cv::Point2f> points;
@@ -105,76 +84,68 @@ typedef struct{
 
 cv::Mat find_uv_coords(UserData* ud)
 {
-    int n = ud->n_u;
-    std::vector<cv::Point2f>& controls = ud->controls;
-    int w = ud->orig.cols;
-    int h = ud->orig.rows;
-    std::vector<float>& knots_x = ud->knots_x;
-    int tn = ud->quantizeCount_u;
-    int n_v = ud->n_v;
+    int n_u								= ud->n_u;
+	int n_v								= ud->n_v;
+    int w								= ud->orig.cols;
+    int h								= ud->orig.rows;
+	int quant							= ud->quantize_u;
+	std::vector<cv::Point2f> &controls	= ud->controls;
+    std::vector<float> &knots_x			= ud->knots_x;  
 
     cv::Mat indmask = cv::Mat::zeros(w, h, CV_8U);
     cv::Mat uv_mask = cv::Mat::zeros(w, h, CV_32FC2);
-    std::vector<pointsTransform> pT(n-2);
-
-    int ind = 1;
-    cv::Point2f uv_coords[4];
-    uv_coords[0] = {0,0};
-    uv_coords[1] = {0,1};
-    uv_coords[2] = {1,1};
-    uv_coords[3] = {1,0};
-
-
+    
     // 1. FIND PERSPECTIVE TRANSFORM MATRIX FOR EACH REGION
+	int ind = 1;
+	std::vector<pointsTransform> pT((n_u - 1) * (n_v - 1) + 1);
 
-    for(int i = 1; i < n - 2; i++)
-    {
-        cv::Point2f xy_coords[4];
-        cv::Point xy_coords_int[4];
+	for(int i = 0; i < n_u - 1; i++) {
+		for (int j = 0; j < n_v - 1; j++) {
+			cv::Point2f uv_coords[4];
+			uv_coords[0] = { knots_x[i + 2], 0.33f * j };
+			uv_coords[1] = { knots_x[i + 2], 0.33f * j + 0.33f };
+			uv_coords[2] = { knots_x[i + 3], 0.33f * j + 0.33f };
+			uv_coords[3] = { knots_x[i + 3], 0.33f * j };
 
-        xy_coords[0] = controls[i];
-        xy_coords[1] = controls[i + (n_v-1)*n];
-        xy_coords[2] = controls[i + (n_v-1)*n + 1];
-        xy_coords[3] = controls[i + 1];
-        for(int i = 0; i < 4; i++)
-        {
-            xy_coords_int[i] = xy_coords[i];
-        }
+			cv::Point2f xy_coords[4];
+			xy_coords[0] = controls[i + j * n_u];
+			xy_coords[1] = controls[i +	(j + 1) * n_u];
+			xy_coords[2] = controls[i + 1 + (j + 1) * n_u];
+			xy_coords[3] = controls[i + 1 + j * n_u];
 
-        cv::fillConvexPoly(indmask, xy_coords_int, 4, cv::Scalar(ind++));
-        pT[i].transform = cv::getPerspectiveTransform(xy_coords, uv_coords);
+			cv::Point xy_coords_int[4];
+			for (int i = 0; i < 4; i++) xy_coords_int[i] = cv::Point(std::round(xy_coords[i].x), std::round(xy_coords[i].y));
 
+			cv::fillConvexPoly(indmask, xy_coords_int, 4, cv::Scalar(ind));
+			pT[ind].transform = cv::getPerspectiveTransform(xy_coords, uv_coords);
+			ind++;
+		}
     }
 
     // 2. FIND ALL POINTS TO TRANSFORM
-
-    for (int i = 0; i < h; i++)
-    {
-        for (int j = 0; j < w; j++)
-        {
+    for (int i = 0; i < h; i++) {
+        for (int j = 0; j < w; j++) {
             cv::Point2f cur_p(j,i);
             int ind = indmask.at<unsigned char>(cur_p);
-            if (!ind)
-                continue;
+            if (!ind) continue;
             pT[ind].points.push_back(cv::Point2f(cur_p));
         }
     }
 
     // 3. TRANSFORM POINTS
-
-    for(int i = 1; i < n - 2; i++)
-    {
+    for(int i = 1; i < pT.size(); i++) {
+		if (!pT[i].points.size()) continue;
         pT[i].quantize_params.resize(pT[i].points.size());
         cv::perspectiveTransform(pT[i].points, pT[i].quantize_params, pT[i].transform);
-        for (int j = 0; j < pT[i].points.size(); j++)
+        
+		for (int j = 0; j < pT[i].points.size(); j++)
         {
-            float u = (knots_x[i+2] + (knots_x[i+3] - knots_x[i+2]) * pT[i].quantize_params[j].x) / tn;
+            float u = pT[i].quantize_params[j].x;
             float v = pT[i].quantize_params[j].y;
-            v = std::min(1.f, std::max(0.f, v));
             uv_mask.at<cv::Vec2f>(pT[i].points[j]) = cv::Vec2f(u, v);
         }
     }
-    cv::normalize(uv_mask, uv_mask, 0, 1, cv::NORM_MINMAX);
+
     return uv_mask;
 }
 
@@ -195,16 +166,17 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 	float h			= image.rows;
 	std::vector<cv::Point2f> &controls = ud->controls;
 	std::string &name = ud->window_name;
-    int normalization_u = ud->quantizeCount_u;
-    int normalization_v = ud->quantizeCount_v;
+    int normalization_u = ud->quantize_u;
+    int normalization_v = ud->quantize_v;
     int n_u = ud->n_u;
     int n_v = ud->n_v;
 
-    static cv::Mat testmask;
+    static cv::Mat uv_coord;
     cv::Mat rendertestmask = cv::Mat::zeros(w, h, CV_32FC3);
 
     static const cv::Point2f originalPivot(100, 100);
     static cv::Point2f pivot = originalPivot;
+	static cv::Point2f prev_pivot = originalPivot;
     static const int pivotId = 21486234;
 
 	if (event == cv::EVENT_LBUTTONUP) {
@@ -231,24 +203,17 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 	}
 
 	if (event == cv::EVENT_MOUSEMOVE && flags == cv::EVENT_FLAG_LBUTTON) {
-
-        if (activeCP >= -1)
+        if (activeCP > -1)
         {
             if (activeCP == pivotId)
             {
-                for (int i = 0; i < n_u; i++)
-                {
-                    for (int j = 0; j < n_v; j++)
-                    {
-                        controls[i + j*n_u] -= (.75f - j*0.25f) * pivot - originalPivot;
-                    }
-                }
+				prev_pivot = pivot;
                 pivot = currentP;
                 for (int i = 0; i < n_u; i++)
                 {
-                    for (int j = 0; j < n_v; j++)
+                    for (int j = 0; j < 1; j++)
                     {
-                        controls[i + j*n_u] += (.75f - j*0.25f) * pivot - originalPivot;
+                        controls[i + j*n_u] += pivot - prev_pivot;
                     }
                 }
             }
@@ -258,40 +223,31 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
             }
 
             orig.copyTo(image);
-//            image = cv::Mat::zeros(image.cols, image.rows, CV_8UC3);
-
-            testmask = find_uv_coords(ud);
-
-            std::cout << testmask.at<cv::Vec2f>(y,x) << std::endl;
-
+            uv_coord = find_uv_coords(ud);
 
             for(int i = 0; i < h; i++)
             {
                 for(int j = 0; j < w; j++)
                 {
                     cv::Point2f curPoint(j, i);
-                    cv::Vec2f u_v = testmask.at<cv::Vec2f>(curPoint);
-                    if (!u_v[0] && !u_v[1])
-                        continue;
-                    u_v[0] = std::min((float)normalization_u - 1, u_v[0] * normalization_u);
-                    u_v[1] = std::min((float)normalization_v - 1, u_v[1] * normalization_v);
+                    cv::Vec2f u_v = uv_coord.at<cv::Vec2f>(curPoint);
+                    if (!u_v[0] && !u_v[1]) continue;
+
+                    u_v[0] = std::min((float)normalization_u - 1, u_v[0] * (normalization_u - 1));
+                    u_v[1] = std::min((float)normalization_v - 1, u_v[1] * (normalization_v - 1));
                     cv::Point2f new_coord = ComputePoint(Nx, Ny, controls, u_v);
                     cv::Point2f uv_coord = curPoint * 2 - new_coord;
                     image.at<cv::Vec3b>(curPoint) = BilinInterp(orig, new_coord.x, new_coord.y);
-//                    image.at<cv::Vec3b>(new_coord.y, new_coord.x)
-//                    = orig.at<cv::Vec3b>(curPoint);
-                            //BilinInterp(orig, new_coord.x, new_coord.y);
                 }
             }
 
-            rendertestmask = _rendertestmask(testmask);
+            rendertestmask = _rendertestmask(uv_coord);
             imshow("testmask", rendertestmask);
 
             for (int i = 0; i < n_u - 3; i++) {
                 for (int j = 0; j < n_v; j++)
                 {
                     cv::circle(image, controls[j * n_u + i], 2, cv::Scalar(10, 10, 255, 120), -1);
-//                    image.at<cv::Vec3b>(controls[j * n_u + i]) = cv::Vec3b(10, 10, 255);
                 }
             }
             cv::circle(image, pivot, 5, cv::Scalar(10, 250, 0), 10);
@@ -310,102 +266,67 @@ int main()
 	float w = (float)image.cols;
 	float h = (float)image.rows;
 
-	std::vector<cv::Point2f> controls =
-	{ 
-		{0.f,0.f},			{w / 3,0.f},		{2 * w / 3,0.f},		{w-1,0.f},
-		{0.f,h / 3},		{w / 3,h / 3},		{2 * w / 3,h / 3},		{w-1,h / 3},
-		{0.f,2 * h / 3},	{w / 3,2 * h / 3},	{2 * w / 3,2 * h / 3},  {w-1,2 * h / 3},
-		{0.f,h-1},			{w / 3,h-1},		{2 * w / 3,h-1},		{w-1,h-1}
-	};
-
-    int n_u = 50, n_v = 4;
-    int quantizeCount_u = 1000, quantizeCount_v = 250;
-    controls.resize(n_v * n_u);
+	int n_u = 50, n_v = 4;
+	std::vector<cv::Point2f> controls(n_v * n_u);
     cv::Point2f center(w/2, h/2);
-    for (int i = 0; i < n_u; i++)
-    {
-        float amp = 120;
-        float amp_mul = 1.25;
-        float amp_change = 30;
+	float r0 = 120;
+	float dr = 30;
 
-        float angle = (float)(i % (n_u - 3)) / (n_u - 3) * 2 * 3.14;
-        cv::Point2f vec(amp * cos(angle), amp * sin(angle));
-        for (int j = 0; j < n_v; j++)
-        {
-            controls[j * n_u + i] = vec + center;
-//            vec *= amp_mul;
-            amp += amp_change;
-//            amp_change += 5;
-            vec = cv::Point2f(amp * cos(angle), amp * sin(angle));
+	for (int i = 0; i < n_u; i++) {
+        float angle = (float)i / (n_u - 1) * 2.f * 3.14f;
+       
+        for (int j = 0; j < n_v; j++) {
+			float r = r0 + j * dr;
+			cv::Point2f coord(r * cos(angle), r * sin(angle));
+
+            controls[j * n_u + i] = center + coord;
         }
     }
 
-
     const int q = 4;
-    std::vector<float> knots = { 0.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f, 1.f };
-    std::vector<float> knots_y(knots.size());
+	int kx_size = n_u + q + 1;
 
-    for (size_t i = 0; i < knots.size(); i++) {
-        knots_y[i] = quantizeCount_v * knots[i];
+	std::vector<float> knots_y = { 0.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f, 1.f };
+	std::vector<float> knots_x(kx_size);
+
+    for (int i = 0; i < kx_size; i++) {
+        knots_x[i] = i / (kx_size - 1.f);
     }
-
-    int kx_size = n_u + q;
-    knots.resize(kx_size + 1);
-    for (int i = 0; i < kx_size + 1; i++)
-    {
-        knots[i] = (float)i / kx_size;
-    }
-    std::vector<float> knots_x(knots.size());
-	for (size_t i = 0; i < knots.size(); i++) {
-        knots_x[i] = quantizeCount_u * knots[i];
-	}
-
-    cv::Mat Nfunc_x(n_u, quantizeCount_u, CV_32FC1), Nfunc_y(n_v, quantizeCount_v, CV_32FC1);
+    
+	int quantize = 1000;
+    cv::Mat Nfunc_x(n_u, quantize, CV_32FC1), Nfunc_y(n_v, quantize, CV_32FC1);
     for (int i = 0; i < n_u; i++) {
-        for (int t = 0; t < quantizeCount_u; t++) {
-            Nfunc_x.at<float>(i, t) = N(knots_x, t, i, q);
+        for (int t = 0; t < quantize; t++) {
+            Nfunc_x.at<float>(i, t) = N(knots_x, t / (quantize - 1.f), i, q);
 		}
 	}
     for (int i = 0; i < n_v; i++) {
-        for (int t = 0; t < quantizeCount_v; t++) {
-            Nfunc_y.at<float>(i, t) = N(knots_y, t, i, 3);
+        for (int t = 0; t < quantize; t++) {
+            Nfunc_y.at<float>(i, t) = N(knots_y, t / (quantize - 1.f), i, q);
         }
     }
-//    for (int t = 0; t < quantizeCount_v; t++)
-//    {
-//        Nfunc_y.at<float>(1, t) = (float)t / (quantizeCount_v - 1);
-//        Nfunc_y.at<float>(0, t) = 1 - Nfunc_y.at<float>(1, t);
-//    }
 
 	for (auto &pt : controls) {
         cv::circle(image, pt, 2, cv::Scalar(10, 10, 250), -1);
 	}
 
-
 	std::string name = "Display Image";
 	UserData ud;
-	ud.image	= image;
-	ud.orig		= orig;
-	ud.Nx		= Nfunc_x;
-    ud.Ny		= Nfunc_y;
-	ud.controls = controls;
-	ud.window_name = name;
-    ud.knots_x = knots_x;
-    ud.knots_y = knots_y;
-    ud.quantizeCount_u = quantizeCount_u;
-    ud.quantizeCount_v = quantizeCount_v;
-    ud.n_u = n_u;
-    ud.n_v = n_v;
-
-//    cv::namedWindow("n", cv::WINDOW_FREERATIO);
-//    cv::imshow("n", Nfunc_y);
-//    cv::namedWindow("nx", cv::WINDOW_FREERATIO);
-//    cv::imshow("nx", Nfunc_x);
+	ud.image		= image;
+	ud.orig			= orig;
+	ud.Nx			= Nfunc_x;
+    ud.Ny			= Nfunc_y;
+	ud.controls		= controls;
+	ud.window_name	= name;
+    ud.knots_x		= knots_x;
+    ud.knots_y		= knots_y;
+    ud.quantize_u	= quantize;
+    ud.quantize_v	= quantize;
+    ud.n_u			= n_u;
+    ud.n_v			= n_v;
 
 	cv::namedWindow(name);
-    cv::namedWindow("mask");
     cv::namedWindow("testmask");
-
     cv::setMouseCallback(name, mouse_callback, &ud);
 	cv::imshow(name, image);
 	cv::waitKey();
