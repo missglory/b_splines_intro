@@ -107,10 +107,10 @@ cv::Mat find_uv_coords(UserData* ud)
 	for(int i = 0; i < n_u - 1; i++) {
 		for (int j = 0; j < n_v - 1; j++) {
 			cv::Point2f uv_coords[4];
-			uv_coords[0] = { knots_x[i + 2], 0.33f * j };
-			uv_coords[1] = { knots_x[i + 2], 0.33f * j + 0.33f };
-			uv_coords[2] = { knots_x[i + 3], 0.33f * j + 0.33f };
-			uv_coords[3] = { knots_x[i + 3], 0.33f * j };
+			uv_coords[0] = { knots_x[i + 2], 1.f / (n_v - 1) * j };
+			uv_coords[1] = { knots_x[i + 2], 1.f / (n_v - 1) * j + 1.f / (n_v - 1) };
+			uv_coords[2] = { knots_x[i + 3], 1.f / (n_v - 1) * j + 1.f / (n_v - 1) };
+			uv_coords[3] = { knots_x[i + 3], 1.f / (n_v - 1) * j };
 
 			cv::Point2f xy_coords[4];
 			xy_coords[0] = cur_controls[i + j * n_u];
@@ -185,8 +185,6 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 	static cv::Point2f prev_pivot = originalPivot;
     static const int pivotId = 21486234;
 
-	std::vector<cv::Point2f> anti_controls(controls.size());
-	for (size_t i = 0; i < anti_controls.size(); i++) anti_controls[i] = controls[i] - d_controls[i];
 	std::vector<cv::Point2f> cur_controls(controls.size());
 	for (size_t i = 0; i < cur_controls.size(); i++) cur_controls[i] = controls[i] + d_controls[i];
 
@@ -201,8 +199,8 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
             startP = {(float)x,(float)y};
         }
 
-        for (int xx = 0; xx < n_u - 3; xx++) {
-            for (int yy = 0; yy < 2; yy++)
+        for (int xx = 0; xx < n_u; xx++) {
+            for (int yy = 0; yy < n_v; yy++)
             {
                 int i = xx + yy * n_u;
                 if (cv::norm(currentP - controls[i] - d_controls[i]) < 3) {
@@ -247,7 +245,7 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 
                     u_v[0] = std::max(0.f, std::min((float)normalization_u - 1, u_v[0] * (normalization_u - 1)));
                     u_v[1] = std::max(0.f, std::min((float)normalization_v - 1, u_v[1] * (normalization_v - 1)));
-					cv::Point2f new_coord = ComputePoint(Nx, Ny, anti_controls, u_v);
+					cv::Point2f new_coord = ComputePoint(Nx, Ny, controls, u_v);
                     
 					//cv::Point2f uv_coord = curPoint * 2 - new_coord;
                     //image.at<cv::Vec3b>(curPoint) = BilinInterp(orig, uv_coord.x, uv_coord.y);
@@ -299,7 +297,7 @@ int main()
     }
 
     const int q = 4;
-	int kx_size = n_u + q + 1;
+	int kx_size = n_u + q;
 
 	std::vector<float> knots_y = { 0.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f, 1.f };
 	std::vector<float> knots_x(kx_size);
@@ -321,16 +319,22 @@ int main()
         }
     }
 
-#if 0
+#if 1
 	int w2 = 500;
 	cv::Mat plot(w2, quantize, CV_8UC3, cv::Scalar::all(0));
 	for (int i = 0; i < Nfunc_y.rows; i++) {
 		for (int j = 0; j < Nfunc_y.cols; j++) {
-			plot.at<cv::Vec3b>(500 * (1 - Nfunc_y.at<float>(i, j)), j) = cv::Vec3b(0, 0, 255);
+			int x = j;
+			int y = w2 * (1 - Nfunc_y.at<float>(i, j));
+
+			x = std::min(quantize - 1, std::max(0, x));
+			y = std::min(w2 - 1, std::max(0, y));
+
+			plot.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 255);
 		}
 	}
 	cv::imshow("plot", plot);
-	cv::waitKey();
+	cv::waitKey(10);
 #endif
 
 	for (auto &pt : controls) {
