@@ -3,6 +3,8 @@
 #include <opencv2/highgui.hpp>
 #include <iostream>
 
+cv::Mat UV_MASK;
+
 struct UserData
 {
 	cv::Mat orig;
@@ -54,8 +56,6 @@ cv::Point2f ComputePoint(const cv::Mat& Nx, const cv::Mat& Ny, const std::vector
     for (int i = 0; i < Nx.rows; i++) {
 		for (int j = 0; j < Ny.rows; j++) {
             cv::Point2f control = controls[Nx.rows * j + i];
-            float mul2 = Ny.at<float>(j, y);
-            float mul1 = Nx.at<float>(i, x);
             ret += Nx.at<float>(i, x) * Ny.at<float>(j, y) * controls[Nx.rows * j + i];
 		}
 	}
@@ -223,7 +223,9 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
             }
 
             orig.copyTo(image);
-            uv_coord = find_uv_coords(ud);
+			image.setTo(cv::Scalar::all(0));
+            //uv_coord = find_uv_coords(ud);
+			uv_coord = UV_MASK;
 
             for(int i = 0; i < h; i++)
             {
@@ -233,11 +235,12 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
                     cv::Vec2f u_v = uv_coord.at<cv::Vec2f>(curPoint);
                     if (!u_v[0] && !u_v[1]) continue;
 
-                    u_v[0] = std::min((float)normalization_u - 1, u_v[0] * (normalization_u - 1));
-                    u_v[1] = std::min((float)normalization_v - 1, u_v[1] * (normalization_v - 1));
+                    u_v[0] = std::max(0.f, std::min((float)normalization_u - 1, u_v[0] * (normalization_u - 1)));
+                    u_v[1] = std::max(0.f, std::min((float)normalization_v - 1, u_v[1] * (normalization_v - 1)));
                     cv::Point2f new_coord = ComputePoint(Nx, Ny, controls, u_v);
                     cv::Point2f uv_coord = curPoint * 2 - new_coord;
-                    image.at<cv::Vec3b>(curPoint) = BilinInterp(orig, uv_coord.x, uv_coord.y);
+                    //image.at<cv::Vec3b>(curPoint) = BilinInterp(orig, uv_coord.x, uv_coord.y);
+					image.at<cv::Vec3b>(new_coord) = orig.at<cv::Vec3b>(curPoint);
                 }
             }
 
@@ -306,6 +309,18 @@ int main()
         }
     }
 
+#if 0
+	int w2 = 500;
+	cv::Mat plot(w2, quantize, CV_8UC3, cv::Scalar::all(0));
+	for (int i = 0; i < Nfunc_y.rows; i++) {
+		for (int j = 0; j < Nfunc_y.cols; j++) {
+			plot.at<cv::Vec3b>(500 * (1 - Nfunc_y.at<float>(i, j)), j) = cv::Vec3b(0, 0, 255);
+		}
+	}
+	cv::imshow("plot", plot);
+	cv::waitKey();
+#endif
+
 	for (auto &pt : controls) {
         cv::circle(image, pt, 2, cv::Scalar(10, 10, 250), -1);
 	}
@@ -324,6 +339,8 @@ int main()
     ud.quantize_v	= quantize;
     ud.n_u			= n_u;
     ud.n_v			= n_v;
+
+	UV_MASK = find_uv_coords(&ud);
 
 	cv::namedWindow(name);
     cv::namedWindow("testmask");
