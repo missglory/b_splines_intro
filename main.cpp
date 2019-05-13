@@ -237,7 +237,7 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
                     u_v[1] = std::min((float)normalization_v - 1, u_v[1] * (normalization_v - 1));
                     cv::Point2f new_coord = ComputePoint(Nx, Ny, controls, u_v);
                     cv::Point2f uv_coord = curPoint * 2 - new_coord;
-                    image.at<cv::Vec3b>(curPoint) = BilinInterp(orig, new_coord.x, new_coord.y);
+                    image.at<cv::Vec3b>(curPoint) = BilinInterp(orig, uv_coord.x, uv_coord.y);
                 }
             }
 
