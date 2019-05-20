@@ -10,6 +10,7 @@ struct UserData
 	cv::Mat Nx;
 	cv::Mat Ny;
 	cv::Mat uv_mask;
+    cv::Mat U_V_map;
 	std::vector<cv::Point2f> controls;
 	std::string window_name;
     std::vector<float> knots_x, knots_y;
@@ -74,20 +75,6 @@ cv::Point2f ComputePoint(const cv::Mat& Nx, const cv::Mat& Ny, const std::vector
     return ComputePoint(Nx, Ny, controls, point.x, point.y);
 }
 
-cv::Mat _rendertestmask(const cv::Mat& testimage)
-{
-    cv::Mat rendertestimage = cv::Mat::zeros(testimage.cols, testimage.rows, CV_32FC3);
-    int from_to[] = { 0,0, 1,1, -1,2 };
-    cv::mixChannels({{testimage}}, {{rendertestimage}}, from_to, testimage.channels());
-    return rendertestimage;
-}
-
-typedef struct{
-    std::vector<cv::Point2f> points;
-    cv::Mat transform;
-    std::vector<cv::Point2f> quantize_params;
-} pointsTransform;
-
 
 void putAffine(cv::Mat& dest, int i1, int i2, int i3, cv::Point2f* uv_coords, cv::Point2f* xy_coords, cv::Mat& U_V_map, cv::Mat& used)
 {
@@ -109,7 +96,6 @@ void putAffine(cv::Mat& dest, int i1, int i2, int i3, cv::Point2f* uv_coords, cv
     {
         tri1Cropped.emplace_back( cv::Point2f( tri1[i].x - r1.x, tri1[i].y -  r1.y) );
         tri2Cropped.emplace_back( cv::Point2f( tri2[i].x - r2.x, tri2[i].y - r2.y) );
-        // fillConvexPoly needs a vector of Point and not Point2f
         tri2CroppedInt.emplace_back( cv::Point(std::round(tri2[i].x - r2.x), std::round(tri2[i].y - r2.y)) );
     }
 
@@ -122,11 +108,11 @@ void putAffine(cv::Mat& dest, int i1, int i2, int i3, cv::Point2f* uv_coords, cv
     warpAffine( img1Cropped, img2Cropped, warpMat, img2Cropped.size(), cv::INTER_LINEAR, cv::BORDER_REFLECT_101);
 
     // Get mask by filling triangle
-    cv::Mat mask = cv::Mat::zeros(r2.height, r2.width, CV_32FC3);
-    fillConvexPoly(mask, tri2CroppedInt, cv::Scalar(1., 1., 1.), 16, 0);
+    cv::Mat mask = cv::Mat::zeros(r2.height, r2.width, img2Cropped.type());
+    cv::fillConvexPoly(mask, tri2CroppedInt, cv::Scalar::all(1.), 16, 0);
 
     // Copy triangular region of the rectangular patch to the output image
-    multiply(img2Cropped, mask, img2Cropped);
+    cv::multiply(img2Cropped, mask, img2Cropped);
     used(r2) += mask;
 
 
@@ -158,26 +144,9 @@ cv::Mat FindUVCoords(const UserData* ud)
 	int quant							= ud->quantize_u;
 	const std::vector<cv::Point2f> &controls	= ud->controls;
     const std::vector<float> &knots_x			= ud->knots_x;  
-
-    cv::Mat indmask = cv::Mat::zeros(w, h, CV_8U);
-    cv::Mat uv_mask = cv::Mat::zeros(w, h, CV_32FC2);
-
-    cv::Mat test_mask = cv::Mat::zeros(w, h, CV_32FC3);
+    cv::Mat& U_V_map = (cv::Mat&)ud->U_V_map;
+    cv::Mat uv_mask = cv::Mat::zeros(w, h, CV_32FC3);
     cv::Mat used = cv::Mat::zeros(w, h, CV_32FC3);
-
-    float sz =  1000;
-    cv::Mat U_V_map = cv::Mat::zeros(sz, sz, CV_32FC3);
-    for(float x = 0; x < sz; x++)
-    {
-        for(float y = 0; y < sz; y++)
-            U_V_map.at<cv::Vec3f>(y, x) = cv::Vec3f(y/sz, x/sz);
-    }
-
-    // 1. FIND PERSPECTIVE TRANSFORM MATRIX FOR EACH REGION
-	int ind = 1;
-    std::vector<pointsTransform> pT((n_u_active - 1) * (n_v - 1) + 1);
-    cv::Mat img1Cropped;
-
 
     for(int i = 0; i < n_u_active - 1; i++) {
 		for (int j = 0; j < n_v - 1; j++) {
@@ -188,63 +157,16 @@ cv::Mat FindUVCoords(const UserData* ud)
             uv_coords[3] = { knots_x[i + n_u_shift + 2], 1.f / (n_v - 1) * j };
 
 			cv::Point2f xy_coords[4];
-
-//            test_mask = _rendertestmask(uv_mask) / 4.f;
 			xy_coords[0] = controls[i + j * n_u];
 			xy_coords[1] = controls[i +	(j + 1) * n_u];
 			xy_coords[2] = controls[i + 1 + (j + 1) * n_u];
 			xy_coords[3] = controls[i + 1 + j * n_u];
 
-
-            putAffine(test_mask, 0, 1, 2, uv_coords, xy_coords, U_V_map, used);
-            putAffine(test_mask, 0, 2, 3, uv_coords, xy_coords, U_V_map, used);
-
-			cv::Point xy_coords_int[4];
-            for (int ii = 0; ii < 4; ii++)
-            {
-                xy_coords_int[ii] = cv::Point(std::round(xy_coords[ii].x), std::round(xy_coords[ii].y));
-//                test_mask.at<cv::Vec3f>(xy_coords[i]) = cv::Vec3f(uv_coords[i].x, uv_coords[i].y, 0.f);
-//                cv::circle(test_mask, xy_coords[ii], 5, cv::Vec3f(.5f + ii / 8.f, uv_coords[ii].y, 0.f), 5);
-
-            }
-			cv::fillConvexPoly(indmask, xy_coords_int, 4, cv::Scalar(ind));
-			pT[ind].transform = cv::getPerspectiveTransform(xy_coords, uv_coords);
-			ind++;
+            putAffine(uv_mask, 0, 2, 3, uv_coords, xy_coords, U_V_map, used);
+            putAffine(uv_mask, 0, 1, 2, uv_coords, xy_coords, U_V_map, used);
 		}
     }
-    imshow("testmask2", test_mask);
-
-    cv::Mat used_gray(used.cols, used.rows, CV_32F);
-    cv::cvtColor(used, used_gray, cv::COLOR_BGR2GRAY);
-    used_gray = 2.f - used_gray;
-    threshold(test_mask, used, -.1, 0., cv::THRESH_BINARY);
-    imshow("usedmask", used /3.f);
-
-    // 2. FIND ALL POINTS TO TRANSFORM
-    for (int i = 0; i < h; i++) {
-        for (int j = 0; j < w; j++) {
-            cv::Point2f cur_p(j,i);
-            int ind = indmask.at<unsigned char>(cur_p);
-            if (!ind) continue;
-            pT[ind].points.push_back(cv::Point2f(cur_p));
-        }
-    }
-
-    // 3. TRANSFORM POINTS
-    for(int i = 1; i < pT.size(); i++) {
-		if (!pT[i].points.size()) continue;
-        pT[i].quantize_params.resize(pT[i].points.size());
-        cv::perspectiveTransform(pT[i].points, pT[i].quantize_params, pT[i].transform);
-        
-		for (int j = 0; j < pT[i].points.size(); j++)
-        {
-            float u = pT[i].quantize_params[j].x;
-            float v = pT[i].quantize_params[j].y;
-            uv_mask.at<cv::Vec2f>(pT[i].points[j]) = cv::Vec2f(u, v);
-        }
-    }
-
-    return test_mask;
+    return uv_mask;
 }
 
 void mouse_callback(int event, int x, int y, int flags, void* userdata)
@@ -320,7 +242,7 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
 
             //uv_coord = FindUVCoords(ud);
             (orig).copyTo(image);
-            image /= 3.f;
+            image /= 5.f;
 //			image.setTo(cv::Scalar::all(0));
 
             for(int i = 0; i < h; i++)
@@ -348,7 +270,6 @@ void mouse_callback(int event, int x, int y, int flags, void* userdata)
             }
             cv::circle(image, pivot, 5, cv::Scalar(10, 250, 0), 10);
             cv::imshow(name, image);
-            imshow("testmask", _rendertestmask(uv_coord) / 2.f);
 		}
 	}
 }
@@ -474,7 +395,6 @@ int main()
     }
     controls.resize(n_u * n_v);
     cv::Point2f center((xmin + xmax)/2.f, (ymin+ymax)/2.f);
-    cv::circle(image, center, 5, cv::Scalar(10, 250, 0), 10);
     float r0 = 1.f;
     float dr = .1f;
 
@@ -552,13 +472,17 @@ int main()
     ud.quantize_v	= quantize;
     ud.n_u			= n_u;
     ud.n_v			= n_v;
-	ud.uv_mask		= FindUVCoords(&ud);
 
-	cv::namedWindow(name);
-    cv::namedWindow("testmask");
-    cv::namedWindow("testmask2");
-    cv::namedWindow("usedmask");
+    float sz =  1000;
+    ud.U_V_map = cv::Mat::zeros(sz, sz, CV_32FC3);
+    for(float x = 0; x < sz; x++)
+    {
+        for(float y = 0; y < sz; y++)
+            ud.U_V_map.at<cv::Vec3f>(y, x) = cv::Vec3f(y/sz, x/sz);
+    }
+    ud.uv_mask		= FindUVCoords(&ud);
 
+    cv::namedWindow(name);
 
     cv::setMouseCallback(name, mouse_callback, &ud);
 	cv::imshow(name, image);
