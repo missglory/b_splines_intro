@@ -30,19 +30,19 @@ float N(const std::vector<float> &knot, float t, int k, int q)
 	return val1 + val2;
 }
 
-cv::Vec3b BilinInterp(const cv::Mat &src, float x, float y)
+cv::Vec3f BilinInterp(const cv::Mat &src, float x, float y)
 {
 	int x1 = (int)std::floor(x);
 	int y1 = (int)std::floor(y);
 	int x2 = (int)std::ceil(x);
 	int y2 = (int)std::ceil(y);
 
-	if (x1 < 0 || y1 < 0 || x2 >= src.cols || y2 >= src.rows) return cv::Vec3b();
+    if (x1 < 0 || y1 < 0 || x2 >= src.cols || y2 >= src.rows) return cv::Vec3f();
 
-	cv::Vec3f p1 = src.at<cv::Vec3b>(y1, x1);
-	cv::Vec3f p2 = src.at<cv::Vec3b>(y1, x2);
-	cv::Vec3f p3 = src.at<cv::Vec3b>(y2, x1);
-	cv::Vec3f p4 = src.at<cv::Vec3b>(y2, x2);
+    cv::Vec3f p1 = src.at<cv::Vec3f>(y1, x1);
+    cv::Vec3f p2 = src.at<cv::Vec3f>(y1, x2);
+    cv::Vec3f p3 = src.at<cv::Vec3f>(y2, x1);
+    cv::Vec3f p4 = src.at<cv::Vec3f>(y2, x2);
 
 	cv::Vec3f c1 = p1 + (p2 - p1) * (x - x1);
 	cv::Vec3f c2 = p3 + (p4 - p3) * (x - x1);
@@ -76,96 +76,103 @@ cv::Point2f ComputePoint(const cv::Mat& Nx, const cv::Mat& Ny, const std::vector
 }
 
 
-void putAffine(cv::Mat& dest, int i1, int i2, int i3, cv::Point2f* uv_coords, cv::Point2f* xy_coords, cv::Mat& U_V_map, cv::Mat& used)
+
+bool SameSide(double x0, double y0, double x1, double y1, double x2, double y2, double x3, double y3)
 {
-    float sz = U_V_map.cols;
-    std::vector<cv::Point2f> tri1 = {{uv_coords[i1].y * (sz-1), uv_coords[i1].x * (sz-1)},
-                                     {uv_coords[i2].y * (sz-1), uv_coords[i2].x * (sz-1)},
-                                     {uv_coords[i3].y * (sz-1), uv_coords[i3].x * (sz-1)}
-                                    };
-    std::vector<cv::Point2f> tri2 = {xy_coords[i1], xy_coords[i2], xy_coords[i3]};
-    cv::Rect r1 = cv::boundingRect(tri1);
-    cv::Rect r2 = cv::boundingRect(tri2);
-
-    std::vector<cv::Point2f> tri1Cropped, tri2Cropped;
-    tri1Cropped.reserve(3);
-    tri2Cropped.reserve(3);
-    std::vector<cv::Point> tri2CroppedInt;
-    tri2CroppedInt.reserve(3);
-    for(int i = 0; i < 3; i++)
-    {
-        tri1Cropped.emplace_back( cv::Point2f( tri1[i].x - r1.x, tri1[i].y -  r1.y) );
-        tri2Cropped.emplace_back( cv::Point2f( tri2[i].x - r2.x, tri2[i].y - r2.y) );
-        tri2CroppedInt.emplace_back( cv::Point(std::round(tri2[i].x - r2.x), std::round(tri2[i].y - r2.y)) );
-    }
-
-    // Apply warpImage to small rectangular patches
-    cv::Mat img1Cropped;
-    U_V_map(r1).copyTo(img1Cropped);
-
-    cv::Mat warpMat = cv::getAffineTransform( tri1Cropped, tri2Cropped );
-    cv::Mat img2Cropped = cv::Mat::zeros(r2.height, r2.width, img1Cropped.type());
-    warpAffine( img1Cropped, img2Cropped, warpMat, img2Cropped.size(), cv::INTER_LINEAR, cv::BORDER_REFLECT_101);
-
-    // Get mask by filling triangle
-    cv::Mat mask = cv::Mat::zeros(r2.height, r2.width, img2Cropped.type());
-    cv::fillConvexPoly(mask, tri2CroppedInt, cv::Scalar::all(1.), 16, 0);
-
-    // Copy triangular region of the rectangular patch to the output image
-    cv::multiply(img2Cropped, mask, img2Cropped);
-    used(r2) += mask;
-
-
-
-    cv::Mat used_gray(used.cols, used.rows, CV_32F);
-    cv::cvtColor(used, used_gray, cv::COLOR_BGR2GRAY);
-    used_gray = 2.f - used_gray;
-    threshold(used_gray, used_gray, .9, 1., cv::THRESH_BINARY);
-    cv::Mat dest_add;
-    cv::Mat used_merge(r2.width, r2.height, CV_32FC3);
-    cv::Mat used_merge_[] = {used_gray(r2), used_gray(r2), used_gray(r2)};
-    cv::merge(used_merge_, 3, used_merge);
-    cv::multiply(img2Cropped, used_merge, dest_add);
-
-
-    dest(r2) += dest_add;
+    double x = (x3 - x2)*(y0 - y2) - (x0 - x2)*(y3 - y2);
+    double y = (x3 - x2)*(y1 - y2) - (x1 - x2)*(y3 - y2);
+    return x * y >= 0;
 }
 
+void Render_uv_mask(cv::Mat dst, cv::Mat tex, const std::vector<cv::Point2f> &dst_pt, const std::vector<cv::Point2f> &src_pt, std::vector<int> triangles)
+{
+    const int n = static_cast<int>(triangles.size()) / 3;
 
+    for (int t = 0; t < n; t++)
+    {
+        int    ix_a = triangles[3 * t];
+        int    ix_b = triangles[3 * t + 1];
+        int    ix_c = triangles[3 * t + 2];
+
+        cv::Point2f dst_a = dst_pt[ix_a];
+        cv::Point2f dst_b = dst_pt[ix_b];
+        cv::Point2f dst_c = dst_pt[ix_c];
+
+        cv::Point2f src_a = src_pt[ix_a];
+        cv::Point2f src_b = src_pt[ix_b];
+        cv::Point2f src_c = src_pt[ix_c];
+
+        cv::Mat1d A(3, 3);  A << dst_a.x, dst_b.x, dst_c.x, dst_a.y, dst_b.y, dst_c.y, 1, 1, 1;
+        cv::Mat1d B(3, 3);  B << src_a.x, src_b.x, src_c.x, src_a.y, src_b.y, src_c.y, 1, 1, 1;
+        cv::Mat1d M = B * A.inv();
+
+        double *affine = M.ptr<double>();
+
+        int xmax = (int)std::ceil(std::max(std::max(dst_a.x, dst_b.x), dst_c.x));
+        int ymax = (int)std::ceil(std::max(std::max(dst_a.y, dst_b.y), dst_c.y));
+        int xmin = (int)std::floor(std::min(std::min(dst_a.x, dst_b.x), dst_c.x));
+        int ymin = (int)std::floor(std::min(std::min(dst_a.y, dst_b.y), dst_c.y));
+        if (xmax > dst.cols - 1) xmax = dst.cols - 1;
+        if (ymax > dst.rows - 1) ymax = dst.rows - 1;
+        if (xmin < 0) xmin = 0;
+        if (ymin < 0) ymin = 0;
+
+        int dtp = dst.type();
+        int stp = tex.type();
+
+        for (int i = ymin; i <= ymax; i++)
+        {
+            float *dst_p = (float*)dst.ptr(i, xmin);
+            for (int j = xmin; j <= xmax; j++, dst_p += dst.channels())
+            {
+                if (SameSide(j, i, dst_a.x, dst_a.y, dst_b.x, dst_b.y, dst_c.x, dst_c.y) && SameSide(j, i, dst_b.x, dst_b.y, dst_c.x, dst_c.y, dst_a.x, dst_a.y) && SameSide(j, i, dst_c.x, dst_c.y, dst_a.x, dst_a.y, dst_b.x, dst_b.y))
+                {
+                    double x = affine[0] * j + affine[1] * i + affine[2];
+                    double y = affine[3] * j + affine[4] * i + affine[5];
+                    cv::Vec3f val = BilinInterp(tex, x, y);
+                    dst.at<cv::Vec3f>(i, j) = val;
+                }
+            }
+        }
+    }
+}
 
 cv::Mat FindUVCoords(const UserData* ud)
 {
     int n_u								= ud->n_u;
     int n_u_shift                       = 2;
     int n_u_active                      = n_u - n_u_shift;
-	int n_v								= ud->n_v;
+    int n_v								= ud->n_v;
     int w								= ud->orig.cols;
     int h								= ud->orig.rows;
-	int quant							= ud->quantize_u;
-	const std::vector<cv::Point2f> &controls	= ud->controls;
-    const std::vector<float> &knots_x			= ud->knots_x;  
+    int quant							= ud->quantize_u;
+    const std::vector<cv::Point2f> &controls	= ud->controls;
+    const std::vector<float> &knots_x			= ud->knots_x;
     cv::Mat& U_V_map = (cv::Mat&)ud->U_V_map;
     cv::Mat uv_mask = cv::Mat::zeros(w, h, CV_32FC3);
     cv::Mat used = cv::Mat::zeros(w, h, CV_32FC3);
 
-    for(int i = 0; i < n_u_active - 1; i++) {
-		for (int j = 0; j < n_v - 1; j++) {
-			cv::Point2f uv_coords[4];
-            uv_coords[0] = { knots_x[i + n_u_shift + 1], 1.f / (n_v - 1) * j };
-            uv_coords[1] = { knots_x[i + n_u_shift + 1], 1.f / (n_v - 1) * j + 1.f / (n_v - 1) };
-            uv_coords[2] = { knots_x[i + n_u_shift + 2], 1.f / (n_v - 1) * j + 1.f / (n_v - 1) };
-            uv_coords[3] = { knots_x[i + n_u_shift + 2], 1.f / (n_v - 1) * j };
-
-			cv::Point2f xy_coords[4];
-			xy_coords[0] = controls[i + j * n_u];
-			xy_coords[1] = controls[i +	(j + 1) * n_u];
-			xy_coords[2] = controls[i + 1 + (j + 1) * n_u];
-			xy_coords[3] = controls[i + 1 + j * n_u];
-
-            putAffine(uv_mask, 0, 2, 3, uv_coords, xy_coords, U_V_map, used);
-            putAffine(uv_mask, 0, 1, 2, uv_coords, xy_coords, U_V_map, used);
-		}
+    std::vector<int> inds;
+    std::vector<cv::Point2f> uvs(n_u * n_v);
+    inds.reserve(((n_u_active-1) * (n_v-1)) * 6);
+    for (int j = 0; j < n_v; j++) {
+        for(int i = 0; i < n_u_active; i++) {
+            uvs[i + j * n_u] = { knots_x[i + n_u_shift + 1] * 999.f, 999.f / (n_v - 1) * j};
+        }
     }
+    for(int i = 0; i < n_u_active-1; i++) {
+        for (int j = 0; j < n_v-1; j++) {
+            inds.push_back(i + j * n_u);
+            inds.push_back(i + (j + 1) * n_u);
+            inds.push_back(i + 1 + (j + 1) * n_u);
+            inds.push_back(i + j * n_u);
+            inds.push_back(i + 1 + j * n_u);
+            inds.push_back(i + 1 + (j + 1) * n_u);
+        }
+    }
+
+    Render_uv_mask(uv_mask, U_V_map, controls, uvs, inds);
+    imshow("mask", uv_mask);
     return uv_mask;
 }
 
@@ -403,7 +410,6 @@ int main()
         controls[n_u - i - 1] = controls[n_u_add - 1 - i];
     }
     for (int i = 0; i < n_u; i++) {
-//        float angle = (float)(i%(n_u_active-1)) / (n_u_active - 1) * 2.f * 3.14f;
         cv::Point2f delta = controls[i] - center;
         for (int j = 0; j < n_v; j++) {
 			float r = r0 + j * dr;
@@ -435,23 +441,6 @@ int main()
         }
     }
 
-#if 0
-	int w2 = 500;
-	cv::Mat plot(w2, quantize, CV_8UC3, cv::Scalar::all(0));
-	for (int i = 0; i < Nfunc_y.rows; i++) {
-		for (int j = 0; j < Nfunc_y.cols; j++) {
-			int x = j;
-			int y = w2 * (1 - Nfunc_y.at<float>(i, j));
-
-			x = std::min(quantize - 1, std::max(0, x));
-			y = std::min(w2 - 1, std::max(0, y));
-
-			plot.at<cv::Vec3b>(y, x) = cv::Vec3b(0, 0, 255);
-		}
-	}
-	cv::imshow("plot", plot);
-	cv::waitKey(10);
-#endif
 
 	for (auto &pt : controls) {
         cv::circle(image, pt, 2, cv::Scalar(10, 10, 250), -1);
@@ -478,7 +467,7 @@ int main()
     for(float x = 0; x < sz; x++)
     {
         for(float y = 0; y < sz; y++)
-            ud.U_V_map.at<cv::Vec3f>(y, x) = cv::Vec3f(y/sz, x/sz);
+            ud.U_V_map.at<cv::Vec3f>(y, x) = cv::Vec3f(x/sz, y/sz);
     }
     ud.uv_mask		= FindUVCoords(&ud);
 
