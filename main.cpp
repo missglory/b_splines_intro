@@ -62,8 +62,8 @@ cv::Point2f ComputePoint(const cv::Mat& Nx, const cv::Mat& Ny, const std::vector
     if (norm < 0.9999)
         return cv::Point2f(-1,-1);
 
-    for (int i = 0; i < Nx.rows; i++) {
-		for (int j = 0; j < Ny.rows; j++) {
+    for (int j = 0; j < Ny.rows; j++) {
+        for (int i = 0; i < Nx.rows; i++) {
             ret += Nx.at<float>(i, x) * Ny.at<float>(j, y) * controls[Nx.rows * j + i];
 		}
 	}
@@ -414,7 +414,7 @@ int main()
         for (int j = 0; j < n_v; j++) {
 			float r = r0 + j * dr;
             cv::Point2f coord(center + delta * r);
-            controls[j * n_u + i] = coord - cv::Point2f{0, 100};
+            controls[j * n_u + i] = coord;// - cv::Point2f{0, 100};
         }
     }
 
@@ -428,7 +428,7 @@ int main()
         knots_x[i] = i / (kx_size - 1.f);
     }
     
-	int quantize = 1000;
+    int quantize = 1024;
     cv::Mat Nfunc_x(n_u, quantize, CV_32FC1), Nfunc_y(n_v, quantize, CV_32FC1);
     for (int i = 0; i < n_u; i++) {
         for (int t = 0; t < quantize; t++) {
@@ -462,7 +462,7 @@ int main()
     ud.n_u			= n_u;
     ud.n_v			= n_v;
 
-    float sz =  1000;
+    float sz =  1024;
     ud.U_V_map = cv::Mat::zeros(sz, sz, CV_32FC3);
     for(float x = 0; x < sz; x++)
     {
