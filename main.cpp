@@ -10,6 +10,11 @@ Mat origg;
 const std::string name = "Display Image";
 static float eps = 0.000001;
 
+Mat wr1, wr2;
+bool is1 = 0;
+//Mat wr11, wr22;
+Mat tex = cv::Mat::zeros(4096, 4096, 16);
+
 struct UserData {
     Mat orig;
     Mat image;
@@ -162,23 +167,32 @@ std::vector<cv::Point2f> readPoints(std::string file) {
 
 void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 {
-	if (event & EVENT_LBUTTONDOWN)
+	if (flags & EVENT_FLAG_SHIFTKEY)
 	{
 		alph += 0.05f;
 
 	}
-	else if (event & EVENT_RBUTTONDOWN)
+	if (flags & EVENT_FLAG_CTRLKEY)
 	{
 		alph -= 0.05f;
 	}
+	if (flags & EVENT_FLAG_ALTKEY) {
+		is1 = !is1;
+		imwrite("C:/Users/User/Pictures/wrinkle_" + std::to_string((int)is1+1) + ".png", tex);
+	}
+
 	alph = std::max(0.f, std::min(1.0f, alph));
 
 	static int activeCP = -1;
 	static cv::Point startP(0, 0);
 	cv::Point2f currentP(x, y);
 	UserData* ud = (UserData*)userdata;
-	Mat& image = ud->image;
-	Mat& orig = ud->orig;
+	//Mat& image = ud->image;
+	Mat image;
+
+	//Mat& orig = ud->orig;
+	Mat& orig = is1 ? wr1 : wr2;
+
 	//    static cv::Point del(w3,h3);
 	if (event == EVENT_LBUTTONUP)
 	{
@@ -195,7 +209,7 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 			}
 		}
 	}
-	if (event == EVENT_MOUSEMOVE && flags == EVENT_FLAG_LBUTTON)
+	if (event == EVENT_MOUSEMOVE && flags & EVENT_FLAG_LBUTTON)
 	{
 		//cout << "Mouse move over the window - position (" << x << ", " << y << ")" << endl;
 		//      cout << "Part(" << px << ", " << py << ")" << endl;
@@ -213,12 +227,16 @@ void CallBackFunc(int event, int x, int y, int flags, void* userdata)
 			delaunay.indices(rough_tri);
 
 
-			cv::Mat tex = cv::Mat::zeros(image.rows, image.cols, image.type());
+			tex = cv::Mat::zeros(image.rows * 4, image.cols * 4, origg.type());
 			RenderFace<cv::Point2f, uchar>(tex, image, src_pts, controlPoints, rough_tri);
 
 			//std::string iter = "_wr2";
 			//cv::imwrite("C:/Users/User/Desktop/wr/tex" + iter + ".png", tex);
-			image = origg - tex * alph;
+
+			cv::Mat texx;
+			cv::resize(tex, texx, cv::Size(tex.cols/4, tex.rows/4));
+
+			imshow("res", origg - texx * alph);
 
 
 			for (auto point : controlPoints)
@@ -248,13 +266,15 @@ int main(int argc, char** argv )
 
 	controlPoints = readPoints(txtname);
 
-		cv::resize(image, image, cv::Size(w,h));
+	cv::resize(image, image, cv::Size(w,h));
 	image.copyTo(orig);
     UserData ud;
     ud.image = image;
     ud.orig = orig;
     
-
+	image.copyTo(wr2);
+	wr1 = imread("C:/Users/User/Pictures/wrinkle1.bmp", 1);
+	cv::resize(wr1, wr1, cv::Size(w, h));
 
 	//std::vector<cv::Point2f> added = { {0.f,0.f},      {w / 3.f,0.f},    {2 * w / 3,0},      {w,0},
 	//									{0,h / 3},     /*{w / 3,h / 3},  {2 * w / 3,h / 3},*/    {w,h / 3},
@@ -284,10 +304,18 @@ int main(int argc, char** argv )
         cv::circle(image, point, 3, cv::Scalar(10, 250, 250), -1);
     }
     namedWindow(name, WINDOW_AUTOSIZE );
-    setMouseCallback(name, CallBackFunc, &ud);
-    imshow(name, image);
+	moveWindow(name, 0, -1080);
+	namedWindow("res");
+	moveWindow("res", 1920 - 1080, -1080);
+
+	setMouseCallback(name, CallBackFunc, &ud);
+    //imshow(name, image);
     
-    waitKey();
+	while (true) {
+		char key = waitKey() & 0xff;
+		if (key == 'c')
+			break;
+	}
     
 	std::ofstream ofs;
 	ofs.open(txtname);
@@ -295,6 +323,9 @@ int main(int argc, char** argv )
 		ofs << controlPoints[i].x / res << "\n" << controlPoints[i].y / res << "\n";
 	}
 	ofs.close();
+
+	//imwrite("C:/Users/User/Pictures/wrinkle1.png", wr1);
+
 
 
 	return 0;
