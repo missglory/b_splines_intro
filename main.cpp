@@ -6,79 +6,21 @@ using std::endl;
 int w3, h3;
 std::vector<cv::Point2f> controlPoints;
 Mat orig;
+Mat origg;
 const std::string name = "Display Image";
 static float eps = 0.000001;
 
 struct UserData {
     Mat orig;
     Mat image;
+
 };
+std::vector<cv::Point2f> src_pts;
 
 
-void CallBackFunc(int event, int x, int y, int flags, void* userdata)
-{
-//     if  ( event == EVENT_LBUTTONDOWN )
-//     {
-//          std::cout << "Left button of the mouse is clicked - position (" << x << ", " << y << ")" << endl;
-//     }
-//     else if  ( event == EVENT_RBUTTONDOWN )
-//     {
-//          std::cout << "Right button of the mouse is clicked - position (" << x << ", " << y << ")" << endl;
-//     }
-//     else if  ( event == EVENT_MBUTTONDOWN )
-//     {
-//          cout << "Middle button of the mouse is clicked - position (" << x << ", " << y << ")" << endl;
-//     }
-    static int activeCP = -1;
-    static cv::Point startP(0,0);
-    cv::Point2f currentP(x,y);
-    UserData* ud = (UserData*) userdata;
-    Mat& image = ud->image;
-    Mat& orig = ud->orig;
-//    static cv::Point del(w3,h3);
-    if ( event == EVENT_LBUTTONUP)
-    {
-        activeCP = -1;
-    }
-    if ( event == EVENT_LBUTTONDOWN)
-    {
-        for (int i = 0; i < controlPoints.size(); i++)
-        {
-            if (cv::norm(currentP - controlPoints[i]) < 10)
-            {
-                activeCP = i;
-                startP = {x,y};
-            }
-        }
-    }
-    if ( event == EVENT_MOUSEMOVE && flags == EVENT_FLAG_LBUTTON)
-    {
-        //cout << "Mouse move over the window - position (" << x << ", " << y << ")" << endl;
-        //      cout << "Part(" << px << ", " << py << ")" << endl;
-        if (activeCP)
-        {
-            controlPoints[activeCP] = currentP;
+float alph = 0.7;
 
-            orig.copyTo(image);
 
-            /*for (int i = 0; i < tn; i++)
-            {
-                cv::Point linePoint(0,0);
-                for (int j = 0; j < n; j++)
-                {
-                    linePoint += N[q - 1].at<float>(j, i) * controlPoints[j + 4];
-                }
-                cv::circle(image, linePoint, 1, cv::Scalar(10, 250, 10), 1);
-            }*/
-
-            for (auto point : controlPoints)
-            {
-                cv::circle(image, point, 3, cv::Scalar(10, 250,250), -1);
-            }
-            imshow(name, image);
-        }
-    }
-}
 
 bool SameSide(double x0, double y0, double x1, double y1, double x2, double y2, double x3, double y3)
 {
@@ -218,15 +160,90 @@ std::vector<cv::Point2f> readPoints(std::string file) {
 }
 
 
+void CallBackFunc(int event, int x, int y, int flags, void* userdata)
+{
+	if (event & EVENT_LBUTTONDOWN)
+	{
+		alph += 0.05f;
+
+	}
+	else if (event & EVENT_RBUTTONDOWN)
+	{
+		alph -= 0.05f;
+	}
+	alph = std::max(0.f, std::min(1.0f, alph));
+
+	static int activeCP = -1;
+	static cv::Point startP(0, 0);
+	cv::Point2f currentP(x, y);
+	UserData* ud = (UserData*)userdata;
+	Mat& image = ud->image;
+	Mat& orig = ud->orig;
+	//    static cv::Point del(w3,h3);
+	if (event == EVENT_LBUTTONUP)
+	{
+		activeCP = -1;
+	}
+	if (event == EVENT_LBUTTONDOWN)
+	{
+		for (int i = 0; i < controlPoints.size(); i++)
+		{
+			if (cv::norm(currentP - controlPoints[i]) < 10)
+			{
+				activeCP = i;
+				startP = { x,y };
+			}
+		}
+	}
+	if (event == EVENT_MOUSEMOVE && flags == EVENT_FLAG_LBUTTON)
+	{
+		//cout << "Mouse move over the window - position (" << x << ", " << y << ")" << endl;
+		//      cout << "Part(" << px << ", " << py << ")" << endl;
+		if (activeCP)
+		{
+			controlPoints[activeCP] = currentP;
+
+			orig.copyTo(image);
+
+
+			cv::Rect bbox = cv::boundingRect(controlPoints);
+			Delaunay delaunay(bbox);
+			delaunay.insert(controlPoints);
+			std::vector<int> rough_tri;
+			delaunay.indices(rough_tri);
+
+
+			cv::Mat tex = cv::Mat::zeros(image.rows, image.cols, image.type());
+			RenderFace<cv::Point2f, uchar>(tex, image, src_pts, controlPoints, rough_tri);
+
+			//std::string iter = "_wr2";
+			//cv::imwrite("C:/Users/User/Desktop/wr/tex" + iter + ".png", tex);
+			image = origg - tex * alph;
+
+
+			for (auto point : controlPoints)
+			{
+				cv::circle(image, point, 3, cv::Scalar(10, 250, 250), -1);
+			}
+			imshow(name, image);
+		}
+	}
+}
+
+
+
 int main(int argc, char** argv )
 {
     Mat image;
 
     image = imread("C:/Users/User/Pictures/wrinkle2.bmp", 1);
+	origg = imread("C:/Users/User/Pictures/V5BreeHeadM.jpg");
+	
 	float w = image.cols;
 	float h = image.rows;
 	w *= res;
 	h *= res;
+	cv::resize(origg, origg, cv::Size(w, h));
 	const std::string txtname = "C:/Users/User/Desktop/wr/licop2.txt";
 
 	controlPoints = readPoints(txtname);
@@ -249,26 +266,12 @@ int main(int argc, char** argv )
 	//}
 
 
-#define MAPP
-#ifdef MAPP
-	std::vector<cv::Point2f> src_pts = readPoints("C:/Users/User/Desktop/wr/lico_src.txt");
+	src_pts = readPoints("C:/Users/User/Desktop/wr/lico_src.txt");
 	for (int i = 0; i < src_pts.size(); i++) {
 		src_pts[i] /= 2.f;
 	}
 
-	cv::Rect bbox = cv::boundingRect(controlPoints);
-	Delaunay delaunay(bbox);
-	delaunay.insert(controlPoints);
-	std::vector<int> rough_tri;
-	delaunay.indices(rough_tri);
-
 	
-	cv::Mat tex = cv::Mat::zeros(image.rows * 4, image.cols * 4, image.type());
-	RenderFace<cv::Point2f, uchar>(tex, image, src_pts, controlPoints, rough_tri);
-
-	std::string iter = "_wr2";
-	cv::imwrite("C:/Users/User/Desktop/wr/tex" + iter + ".png", tex);
-#else
 
 
 	if (image.empty())
@@ -293,7 +296,6 @@ int main(int argc, char** argv )
 	}
 	ofs.close();
 
-#endif
 
 	return 0;
 }
